@@ -161,13 +161,15 @@
       kcalDia += perDay * 10 * f.kcal;
       rows.push({ food: f, necessarioKg: perDay * targetDays, temKg: have[f.id] || 0 });
     });
-    // fecha o déficit calórico com arroz (barato e duradouro)
-    var deficit = h.kcal - kcalDia, extraArroz = 0;
-    var arroz = rows.filter(function (r) { return r.food.id === 'arroz'; })[0];
-    if (deficit > 0 && arroz) {
-      extraArroz = deficit / (10 * arroz.food.kcal) * targetDays;
-      arroz.necessarioKg += extraArroz;
-    }
+    // As porções do catálogo podem não cobrir 100% das calorias. O que falta é mostrado À PARTE
+    // (complemento), para não misturar com a porção de cada alimento.
+    var deficit = Math.max(0, h.kcal - kcalDia);
+    var arrozDef = foods.filter(function (f) { return f.id === 'arroz'; })[0];
+    var complemento = {
+      cobertura: h.kcal > 0 ? Math.min(100, kcalDia / h.kcal * 100) : 100,
+      kcalDia: deficit, kcalTotal: deficit * targetDays,
+      arrozKg: arrozDef && deficit > 0 ? deficit / (10 * arrozDef.kcal) * targetDays : 0
+    };
     rows.forEach(function (r) {
       r.faltaKg = Math.max(0, r.necessarioKg - r.temKg);
       r.faltaQtd = fromKg(r.food, r.faltaKg);
@@ -176,7 +178,7 @@
       r.pct = r.necessarioKg > 0 ? Math.min(100, r.temKg / r.necessarioKg * 100) : 100;
     });
     rows.sort(function (a, b) { return a.pct - b.pct; });
-    return { rows: rows, extraArroz: extraArroz, kcalPlano: kcalDia + extraArroz * 0, h: h };
+    return { rows: rows, complemento: complemento, kcalPlano: kcalDia, h: h };
   }
 
   /* Estratégias e sugestões com base na análise */
