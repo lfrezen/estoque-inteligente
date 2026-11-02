@@ -808,6 +808,7 @@
   function notifBtn(a) { return a ? '<button class="btn sec" type="button" data-' + (a[1] === 'tab' ? 'tab' : 'act') + '="' + a[2] + '">' + esc(a[0]) + '</button>' : ''; }
   function vNotificacoes() {
     var N = notifCache, ativas = N.filter(function (n) { return !adiada(n); }), adiadas = N.filter(adiada), h = '<h2>🔔 Notificações</h2>';
+    if (driveStatus.txt) h += '<div class="sug ' + ({ ok: 'ok', warn: 'medio', bad: 'alto', info: '' }[driveStatus.tipo] || '') + '"><div>☁️ ' + esc(driveStatus.txt) + '</div></div>';
     if (!ativas.length) h += '<div class="empty"><big>✅</big>Tudo em dia. Nenhum aviso no momento.</div>';
     else {
       h += '<div class="flex between" style="margin-bottom:10px"><span class="muted">' + ativas.length + ' aviso(s)</span><button class="btn sec" type="button" data-act="notif-adiar-todas">Adiar todos por 1 dia</button></div>';
