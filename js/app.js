@@ -188,6 +188,7 @@
   }
 
   /* ---------------- PESSOAS ---------------- */
+  var editPessoa = '';
   function vPessoas() {
     var h = '<h2>Pessoas da casa</h2><div class="card"><form class="form" data-form="pessoa">' +
       '<div><label>Nome</label><input name="nome" placeholder="Opcional" maxlength="40"></div>' +
@@ -200,8 +201,14 @@
       state.pessoas.map(function (p, i) {
         var prof = D.PERFIS[p.perfil], base = E.personKcal(p);
         var mf = (prof.vuln ? D.MODOS[state.modo].vuln : D.MODOS[state.modo].adulto);
-        return '<tr><td>' + esc(p.nome || 'Pessoa ' + (i + 1)) + '</td><td>' + prof.nome + '</td><td class="num">' + n0(base) + '</td><td class="num">' + n0(base * mf) + '</td>' +
-          '<td><button class="btn del" data-act="del-pessoa" data-id="' + p.id + '">Remover</button></td></tr>';
+        if (p.id === editPessoa) {
+          return '<tr class="editando"><td><input data-f="nome" value="' + esc(p.nome || '') + '" maxlength="40" placeholder="Pessoa ' + (i + 1) + '" aria-label="Nome"></td>' +
+            '<td><select data-f="perfil" aria-label="Perfil">' + Object.keys(D.PERFIS).map(function (k) { return '<option value="' + k + '"' + (p.perfil === k ? ' selected' : '') + '>' + D.PERFIS[k].nome + '</option>'; }).join('') + '</select></td>' +
+            '<td class="num"><input data-f="kcal" type="number" min="500" max="5000" step="50" value="' + (Number(p.kcal) > 0 ? p.kcal : '') + '" placeholder="padrão" style="width:90px" aria-label="kcal por dia"></td><td class="num muted">—</td>' +
+            '<td style="white-space:nowrap"><button class="btn" type="button" data-act="save-pessoa" data-id="' + p.id + '">Salvar</button> <button class="btn sec" type="button" data-act="cancel-pessoa">Cancelar</button></td></tr>';
+        }
+        return '<tr><td>' + esc(p.nome || 'Pessoa ' + (i + 1)) + '</td><td>' + prof.nome + '</td><td class="num">' + n0(base) + (Number(p.kcal) > 0 ? ' <span class="tag est" title="valor definido por você">manual</span>' : '') + '</td><td class="num">' + n0(base * mf) + '</td>' +
+          '<td style="white-space:nowrap"><button class="btn sec" type="button" data-act="edit-pessoa" data-id="' + p.id + '">Editar</button> <button class="btn del" data-act="del-pessoa" data-id="' + p.id + '">Remover</button></td></tr>';
       }).join('') + '</tbody></table></div>' +
       '<p class="muted">Total: ' + hh.n + ' pessoa(s), ' + n0(hh.kcal) + ' kcal/dia, ' + n0(hh.prot) + ' g de proteína/dia no modo ' + D.MODOS[state.modo].nome + '.</p>' +
       '<div class="disclaimer">Os valores são médias de referência. Crianças, gestantes, lactantes e pessoas com doenças crônicas devem ser acompanhadas por profissional de saúde. O sistema reduz pouco o consumo desses perfis nos modos de racionamento.</div></div>';
@@ -695,7 +702,10 @@
     if (t.dataset.modo) { state.modo = t.dataset.modo; save(); render(); return; }
     if (t.dataset.tab) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
     var act = t.dataset.act, id = t.dataset.id;
-    if (act === 'del-pessoa') { state.pessoas = state.pessoas.filter(function (p) { return p.id !== id; }); save(); render(); }
+    if (act === 'edit-pessoa') { editPessoa = id; render(); var ed = document.querySelector('tr.editando [data-f=nome]'); if (ed) ed.focus(); }
+    else if (act === 'cancel-pessoa') { editPessoa = ''; render(); }
+    else if (act === 'save-pessoa') { salvarPessoa(id, t.closest('tr')); }
+    else if (act === 'del-pessoa') { state.pessoas = state.pessoas.filter(function (p) { return p.id !== id; }); save(); render(); }
     else if (act === 'del-estoque') { state.estoque = state.estoque.filter(function (s) { return s.id !== id; }); save(); render(); }
     else if (act === 'reset-porcao') { delete state.porcoes[id]; save(); render(); }
     else if (act === 'cat-mais') { cat.n += 80; catRefresh(); }
@@ -764,6 +774,19 @@
     save(); render();
   });
 
+  function salvarPessoa(id, tr) {
+    var p = find(state.pessoas, id); if (!p || !tr) return;
+    var kc = Number(tr.querySelector('[data-f=kcal]').value);
+    p.nome = tr.querySelector('[data-f=nome]').value.trim().slice(0, 40);
+    p.perfil = tr.querySelector('[data-f=perfil]').value;
+    p.kcal = kc >= 500 && kc <= 5000 ? kc : 0;
+    editPessoa = ''; save(); render();
+  }
+  document.addEventListener('keydown', function (e) {
+    var f = e.target && e.target.dataset && e.target.dataset.f; if (!f) return;
+    if (e.key === 'Enter') { e.preventDefault(); salvarPessoa(editPessoa, e.target.closest('tr')); }
+    else if (e.key === 'Escape') { editPessoa = ''; render(); }
+  });
   function find(arr, id) { for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return arr[i]; return null; }
 
   /* ---------- seletor com busca ---------- */
