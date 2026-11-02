@@ -787,9 +787,9 @@
       if (du !== null && du < 15)
         out.push({ id: 'saude:rep:' + m.id, cat: 'saude', nivel: du < 7 ? 'alto' : 'medio', ic: '🔁', ordem: du, titulo: 'Reposição: ' + m.nome, txt: 'A reserva de uso contínuo dura cerca de ' + dias(du) + '. Peça a receita e reponha.', acao: ['Ver medicamentos', 'tab', 'meds'] });
     });
-    // backup
+    // backup (o id muda com a situação: adiar "alterações pendentes" não esconde "sessão do Google expirou")
     var b = backupAviso();
-    if (b && b.nivel !== 'ok') out.push({ id: 'backup', cat: 'backup', nivel: b.nivel, ic: b.ic, ordem: -1, titulo: 'Backup', txt: b.txt, acao: b.btn });
+    if (b && b.nivel !== 'ok') out.push({ id: 'backup:' + (b.btn && b.btn[2] || ''), cat: 'backup', nivel: b.nivel, ic: b.ic, ordem: -1, titulo: 'Backup', txt: b.txt, acao: b.btn });
     // revisão do kit de emergência
     var dr0 = PRONT.diasDesdeRevisao(state, hoje);
     if (dr0 !== null && dr0 > 180) out.push({ id: 'pront:rev', cat: 'prontidao', nivel: 'medio', ic: '🔁', ordem: 0, titulo: 'Revisão do kit de emergência', txt: 'A última revisão foi há ' + dr0 + ' dias. Confira validades, pilhas, água e a mochila de fuga.', acao: ['Abrir Prontidão', 'tab', 'pront'] });
