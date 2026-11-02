@@ -102,18 +102,15 @@
       return '<div class="sug ' + s.nivel + '"><span class="ic" aria-hidden="true">' + ic + '</span><div><b>' + esc(s.t) + '</b>' + esc(s.d) + '</div></div>';
     }).join('') + '</div>';
 
-    // equilíbrio
+    // macronutrientes
+    h += macroCard(an, meta);
     var tot = an.tot.kcal || 1;
-    h += '<div class="row2"><div class="card"><h3>Equilíbrio de nutrientes</h3>' +
-      macroBar('Carboidrato', an.macros.carb, '45–65%', an.macros.carb >= 45 && an.macros.carb <= 70) +
-      macroBar('Proteína', an.macros.prot, '10–20%', an.macros.prot >= 10 && an.macros.prot <= 25) +
-      macroBar('Gordura', an.macros.gord, '20–35%', an.macros.gord >= 18 && an.macros.gord <= 38) + '</div>';
     h += '<div class="card"><h3>Calorias por grupo</h3>' + Object.keys(D.GRUPOS).map(function (g) {
       var v = (an.grupos[g] || 0); if (!v) return '';
       var dd = v / an.h.kcal;
-      return '<div class="meal"><div class="flex" style="justify-content:space-between"><span>' + D.GRUPOS[g] + '</span><span class="muted">' + dias(dd) + ' (' + n0(v / tot * 100) + '%)</span></div>' +
+      return '<div class="meal"><div class="flex between"><span>' + GEMOJI[g] + ' ' + D.GRUPOS[g] + '</span><span class="muted">' + dias(dd) + ' (' + n0(v / tot * 100) + '%)</span></div>' +
         '<div class="bar"><i style="width:' + Math.min(100, v / tot * 100) + '%"></i></div></div>';
-    }).join('') + '</div></div>';
+    }).join('') + '</div>';
 
     // por alimento
     if (an.items.length) {
@@ -136,6 +133,41 @@
     return h;
   }
   function kpi(l, v, c, sub, ic) { return '<div class="kpi ' + c + '"><div class="l"><span class="ic" aria-hidden="true">' + (ic || '') + '</span> ' + l + '</div><div class="v">' + v + '</div><div class="l">' + sub + '</div></div>'; }
+  function donut(parts) {
+    var R = 54, C = 2 * Math.PI * R, off = 0, out = '';
+    parts.forEach(function (p) {
+      var len = C * p.pct / 100;
+      out += '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="' + p.cor + '" stroke-width="18" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '"/>';
+      off += len;
+    });
+    return '<svg viewBox="0 0 140 140" style="transform:rotate(-90deg)" aria-hidden="true"><circle cx="70" cy="70" r="' + R + '" fill="none" stroke="var(--bar)" stroke-width="18"/>' + out + '</svg>';
+  }
+  function macroCard(an, meta) {
+    var m = an.macro, mc = an.macros;
+    var def = [
+      { k: 'carb', nome: 'Carboidratos', ic: '🍚', cor: 'var(--accent)', faixa: '45–65%', ok: mc.carb >= 45 && mc.carb <= 70, pct: mc.carb },
+      { k: 'prot', nome: 'Proteínas', ic: '🥩', cor: 'var(--bad)', faixa: '10–20%', ok: mc.prot >= 10 && mc.prot <= 25, pct: mc.prot },
+      { k: 'gord', nome: 'Gorduras', ic: '🫒', cor: 'var(--info)', faixa: '20–35%', ok: mc.gord >= 18 && mc.gord <= 38, pct: mc.gord }
+    ];
+    var kg = function (g) { return g >= 1000 ? n1(g / 1000) + ' kg' : n0(g) + ' g'; };
+    var h = '<div class="card"><h3>🥗 Carboidratos, proteínas e gorduras do estoque</h3>' +
+      '<p class="muted">Quanto de cada nutriente existe nos alimentos que você tem, comparado ao que a casa precisa por dia (proteína pelo perfil de cada pessoa; gordura cerca de 28% das calorias; carboidrato o restante).</p>' +
+      '<div class="macro-wrap"><div class="donut">' + donut(def.map(function (d) { return { pct: d.pct, cor: d.cor }; })) +
+      '<div class="mid"><b>' + n0(an.tot.kcal) + '</b><span>kcal no estoque</span></div></div><div class="macro-list">';
+    def.forEach(function (d) {
+      var x = m[d.k], c = cls(x.dias, meta), pctMeta = isFinite(x.dias) ? Math.min(100, x.dias / meta * 100) : 100;
+      h += '<div class="macro"><div class="flex between"><b><span class="dot" style="background:' + d.cor + '"></span>' + d.ic + ' ' + d.nome + '</b>' +
+        '<span class="tag ' + (d.ok ? '' : 'est') + '" title="Faixa recomendada: ' + d.faixa + ' das calorias">' + n0(d.pct) + '% das kcal</span></div>' +
+        '<div class="flex between muted"><span>Estoque: <b>' + kg(x.tem) + '</b></span><span>Precisa: <b>' + n0(x.precisa) + ' g/dia</b></span><span>Dura: <b>' + dias(x.dias) + '</b></span></div>' +
+        '<div class="bar ' + (c === 'ok' ? '' : c) + '" title="' + n0(pctMeta) + '% da meta de ' + meta + ' dias"><i style="width:' + pctMeta.toFixed(0) + '%"></i></div>' +
+        (x.fontes.length ? '<div class="muted src">Principais fontes: ' + x.fontes.map(function (f) { return em(f.food) + ' ' + esc(f.food.nome.replace(/ \(.*\)/, '')) + ' ' + n0(f.pct) + '%'; }).join(' · ') + '</div>' : '') + '</div>';
+    });
+    h += '</div></div>';
+    var menor = def.slice().sort(function (a, b) { return m[a.k].dias - m[b.k].dias; })[0];
+    if (isFinite(m[menor.k].dias) && m[menor.k].dias < meta)
+      h += '<p class="muted" style="margin-top:10px">⚠️ O nutriente que acaba primeiro é <b>' + menor.nome.toLowerCase() + '</b> (' + dias(m[menor.k].dias) + '). Reforce essa categoria nas compras.</p>';
+    return h + '</div>';
+  }
   function macroBar(nome, v, faixa, ok) {
     return '<div class="meal"><div class="flex" style="justify-content:space-between"><span>' + nome + '</span><span class="muted">' + n0(v) + '% · ideal ' + faixa + '</span></div>' +
       '<div class="bar ' + (ok ? '' : 'warn') + '"><i style="width:' + Math.min(100, v) + '%"></i></div></div>';

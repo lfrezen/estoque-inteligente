@@ -124,3 +124,15 @@ button:focus-visible, .tabs button:focus-visible, .seg button:focus-visible { ou
   main { padding: 4px 12px 20px; } .grid { grid-template-columns: 1fr 1fr; gap: 10px; } .kpi { padding: 12px; } .kpi .v { font-size: 1.35rem; }
   .seg { width: 100%; } .seg button { flex: 1; padding: 6px 4px; font-size: .8rem; }
 }
+
+/* Macronutrientes */
+.macro-wrap { display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: center; margin-top: 8px; }
+.donut { position: relative; width: 150px; height: 150px; }
+.donut svg { width: 100%; height: 100%; }
+.donut .mid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.donut .mid b { font-size: 1.35rem; line-height: 1.1; } .donut .mid span { font-size: .7rem; color: var(--muted); }
+.macro-list { display: grid; gap: 14px; }
+.macro .bar { margin: 6px 0 4px; }
+.macro .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.macro .src { font-size: .8rem; }
+@media (max-width: 560px) { .macro-wrap { grid-template-columns: 1fr; justify-items: center; } .macro-list { width: 100%; } }
