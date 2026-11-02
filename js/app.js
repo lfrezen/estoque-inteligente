@@ -236,7 +236,7 @@
     if (!state.pessoas.length) return h + '<div class="empty"><big>👥</big>Cadastre as pessoas primeiro.</div>';
     var dp = E.despensa(state, state.modo, meta);
     h += '<p class="muted">Lista para ' + dp.h.n + ' pessoa(s) em modo <b>' + D.MODOS[state.modo].nome + '</b>, considerando o que você já tem. ' +
-      'O que faltar de calorias é completado com arroz, que é barato e dura muito.</p>';
+      'Cada linha usa a mesma porção diária do Catálogo e do Painel.</p>';
     var falta = dp.rows.filter(function (r) { return r.faltaKg > 0.001; });
     h += '<div class="card"><div class="scroll"><table><thead><tr><th>Alimento</th><th class="num">Meta</th><th class="num">Tem</th><th class="num">Falta</th><th style="width:20%">Atingido</th></tr></thead><tbody>' +
       dp.rows.map(function (r) {
@@ -247,6 +247,13 @@
           '<td><div class="bar ' + (r.pct >= 100 ? '' : r.pct >= 50 ? 'warn' : 'bad') + '"><i style="width:' + r.pct.toFixed(0) + '%"></i></div></td></tr>';
       }).join('') + '</tbody></table></div></div>';
     if (!falta.length) h += '<div class="sug ok"><b>Despensa completa para a meta.</b></div>';
+    var cp = dp.complemento;
+    if (cp.kcalDia > 1) {
+      h += '<div class="card"><h3>⚡ Complemento calórico</h3>' +
+        '<p>As porções do catálogo cobrem <b>' + n0(cp.cobertura) + '%</b> das calorias da casa. Faltam <b>' + n0(cp.kcalDia) + ' kcal por dia</b> (' + n0(cp.kcalTotal / 1000) + ' mil kcal em ' + meta + ' dias).</p>' +
+        '<p>Para fechar, aumente as porções no Catálogo ou some alimentos baratos e duradouros. Em arroz, seriam cerca de <b>' + n0(cp.arrozKg) + ' kg</b> a mais, ou o equivalente em macarrão, farinha, feijão, óleo e açúcar. O ideal é dividir entre vários alimentos, não só arroz.</p>' +
+        '<p class="muted">Este valor não está incluído nas linhas acima.</p></div>';
+    }
     // água e gás
     var an = E.analyze(state);
     var aguaMeta = an.aguaDia * meta, gasMeta = an.gasDia * meta;
