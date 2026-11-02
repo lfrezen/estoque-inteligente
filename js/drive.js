@@ -1,14 +1,24 @@
 /* Backup no Google Drive, 100% no navegador.
    Usa o login do Google (Google Identity Services, "token model") e a API REST do Drive com o escopo
    drive.appdata: a pasta oculta do aplicativo. O app só enxerga o arquivo que ele mesmo criou, nunca o resto do Drive.
-   O token de acesso fica só na memória (expira em cerca de 1 hora) e nunca é gravado. */
+   O token de acesso dura cerca de 1 hora. Fica na memória e também na sessão da aba (sessionStorage), só para sobreviver a
+   atualizar a página: ao fechar a aba ele some, e nunca vai para o localStorage nem para o backup. */
 (function (root) {
   /* ID de cliente OAuth do app (público por natureza: não é segredo; só vale nas origens autorizadas no Google Cloud).
      Quem hospedar o próprio site pode trocar por outro ID na tela de configuração. */
   var ID_PADRAO = '123288636103-k55hebl3lti48m6f1c8d0kdh08ip81ch.apps.googleusercontent.com';
   var ESCOPO = 'https://www.googleapis.com/auth/drive.appdata';
   var ARQUIVO = 'estoque-inteligente-backup.json';
-  var token = null, expira = 0, clienteId = '';
+  var token = null, expira = 0, clienteId = '', CHAVE = 'estoque-inteligente-drive-sessao';
+
+  function guardar() { try { sessionStorage.setItem(CHAVE, JSON.stringify({ t: token, e: expira, c: clienteId })); } catch (e) { /* ignora */ } }
+  function esquecer() { try { sessionStorage.removeItem(CHAVE); } catch (e) { /* ignora */ } }
+  (function restaurar() {
+    try {
+      var s = JSON.parse(sessionStorage.getItem(CHAVE) || 'null');
+      if (s && s.t && s.e > Date.now()) { token = s.t; expira = s.e; clienteId = s.c || ''; } else if (s) esquecer();
+    } catch (e) { /* ignora */ }
+  })();
 
   function erro(codigo, msg) { var e = new Error(msg); e.codigo = codigo; return e; }
 
@@ -31,7 +41,7 @@
           client_id: id, scope: ESCOPO,
           callback: function (r) {
             if (!r || r.error) { rej(erro('auth', (r && (r.error_description || r.error)) || 'Falha no login.')); return; }
-            token = r.access_token; clienteId = id; expira = Date.now() + ((r.expires_in || 3600) * 1000) - 60000; res();
+            token = r.access_token; clienteId = id; expira = Date.now() + ((r.expires_in || 3600) * 1000) - 60000; guardar(); res();
           },
           error_callback: function (e) {
             rej(erro('auth', e && e.type === 'popup_closed' ? 'A janela do Google foi fechada antes de concluir.' :
@@ -47,11 +57,11 @@
   function expiraEm() { return temToken() ? new Date(expira) : null; }
 
   function req(url, opts) {
-    if (!temToken()) { token = null; return Promise.reject(erro('auth', 'Sessão expirada. Clique em Conectar de novo.')); }
+    if (!temToken()) { token = null; esquecer(); return Promise.reject(erro('auth', 'Sessão expirada. Clique em Conectar de novo.')); }
     opts = opts || {}; opts.headers = Object.assign({ Authorization: 'Bearer ' + token }, opts.headers || {});
     return fetch(url, opts).then(function (r) {
       if (r.ok) return r;
-      if (r.status === 401) { token = null; throw erro('auth', 'Sessão expirada. Clique em Conectar de novo.'); }
+      if (r.status === 401) { token = null; esquecer(); throw erro('auth', 'Sessão expirada. Clique em Conectar de novo.'); }
       return r.text().then(function (t) {
         if (r.status === 403 && /(accessNotConfigured|has not been used|is disabled|SERVICE_DISABLED)/i.test(t)) throw erro('api', 'A Google Drive API não está ativada no projeto Google deste app. Quem mantém o app precisa ativá-la em APIs e serviços → Biblioteca.');
         if (r.status === 403) throw erro('permissao', 'O Google negou a permissão. Se o app ainda está em modo de teste, o seu e-mail precisa estar na lista de usuários de teste do projeto.');
@@ -86,7 +96,7 @@
   }
 
   function desconectar() {
-    var t = token; token = null; expira = 0;
+    var t = token; token = null; expira = 0; esquecer();
     try { if (t && root.google && root.google.accounts && root.google.accounts.oauth2.revoke) root.google.accounts.oauth2.revoke(t, function () {}); } catch (e) { /* ignora */ }
   }
 
