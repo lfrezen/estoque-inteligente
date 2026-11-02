@@ -206,3 +206,8 @@ details.area summary { cursor: pointer; display: flex; justify-content: space-be
 details.area summary::-webkit-details-marker { display: none; }
 .rel-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .rel-t.plan td { height: 11mm; vertical-align: top; }
+
+/* Aviso de backup no Painel */
+#avisoBackup { flex-wrap: wrap; margin-bottom: 16px; }
+#avisoBackup > div:nth-child(2) { flex: 1 1 220px; min-width: 0; }
+@media (max-width: 560px) { #avisoBackup > .flex { flex: 0 0 100%; padding-left: 34px; } }

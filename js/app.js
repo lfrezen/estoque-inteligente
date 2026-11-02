@@ -72,6 +72,7 @@
     var pct = isFinite(d.energia) ? Math.min(100, d.energia / meta * 100) : 100;
     var c = cls(d.energia, meta), R = 70, C = 2 * Math.PI * R;
     var veredito = d.energia >= meta ? 'Meta atingida em calorias 🎉' : d.energia >= meta / 3 ? 'Já tem uma boa base. Ainda falta chegar à meta.' : 'Estoque curto para a meta. Veja a aba Compras.';
+    h += backupAvisoHtml();
     h += '<div class="card hero"><div class="ring ' + c + '" role="img" aria-label="' + n0(pct) + '% da meta">' +
       '<svg viewBox="0 0 168 168"><circle class="trk" cx="84" cy="84" r="' + R + '" fill="none" stroke-width="14"/>' +
       '<circle class="val" cx="84" cy="84" r="' + R + '" fill="none" stroke-width="14" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - pct / 100)).toFixed(1) + '"/></svg>' +
@@ -680,10 +681,36 @@
     return h;
   }
 
+  /* ---------------- AVISO DE BACKUP NO PAINEL ---------------- */
+  function backupAviso() {
+    var d = dr(), tem = (state.pessoas || []).length + (state.estoque || []).length + (state.meds || []).length;
+    if (!tem) return null;
+    var agora = Date.now(), ult = d.ultimo ? new Date(d.ultimo).getTime() : 0, exp = state.ultimoExport ? new Date(state.ultimoExport).getTime() : 0;
+    var melhor = Math.max(ult, exp), alt = state.atualizado ? new Date(state.atualizado).getTime() : 0;
+    var dias = melhor ? Math.floor((agora - melhor) / 86400000) : null, on = DRIVE.temToken();
+    var quando = function (t) { var n = Math.floor((agora - t) / 86400000); return n <= 0 ? 'hoje' : n === 1 ? 'ontem' : 'há ' + n + ' dias'; };
+    if (!melhor) return { nivel: 'alto', ic: '⚠️', txt: 'Você ainda não fez backup dos seus dados. Se limparem os dados do navegador ou você trocar de aparelho, eles se perdem.', btn: ['Fazer backup', 'tab', 'config'], urgente: true };
+    if (d.auto && !on && ult) return { nivel: 'medio', ic: '⏸️', txt: 'O backup automático está parado: a sessão do Google expirou. Entre de novo para retomar (último backup no Drive: ' + quando(ult) + ').', btn: ['Entrar com o Google', 'act', 'drive-conectar'] };
+    if (ult && alt > ult + 1500) {
+      return on ? { nivel: 'medio', ic: '📝', txt: 'Há alterações que ainda não foram salvas no Drive (último backup: ' + quando(ult) + ').', btn: ['Fazer backup agora', 'act', 'drive-backup'] }
+        : { nivel: 'medio', ic: '📝', txt: 'Há alterações desde o último backup no Drive (' + quando(ult) + '). Entre no Google para salvar.', btn: ['Entrar com o Google', 'act', 'drive-conectar'] };
+    }
+    if (dias > 7) return { nivel: 'medio', ic: '🕒', txt: 'Seu último backup foi ' + quando(melhor) + '. Vale fazer um novo.', btn: ['Fazer backup', 'tab', 'config'] };
+    return { nivel: 'ok', ic: '✅', txt: 'Backup em dia: o último foi ' + quando(melhor) + (ult >= exp ? ' (Google Drive)' : ' (arquivo)') + '.' };
+  }
+  function backupAvisoHtml() {
+    var a = backupAviso(); if (!a) return '';
+    if (a.nivel !== 'ok' && !a.urgente && state.avisoBackupAte && new Date(state.avisoBackupAte).getTime() > Date.now()) return '';
+    var btn = a.btn ? '<button class="btn sec" type="button" data-' + (a.btn[1] === 'tab' ? 'tab' : 'act') + '="' + a.btn[2] + '">' + a.btn[0] + '</button>' : '';
+    var dispensar = a.nivel !== 'ok' && !a.urgente ? '<button class="btn sec" type="button" data-act="backup-dispensar" title="Esconder por 1 dia">Depois</button>' : '';
+    return '<div class="sug ' + a.nivel + '" id="avisoBackup"><span class="ic" aria-hidden="true">' + a.ic + '</span><div style="flex:1"><b>Backup</b>' + esc(a.txt) + '</div>' +
+      ((btn || dispensar) ? '<div class="flex" style="align-self:center">' + btn + dispensar + '</div>' : '') + '</div>';
+  }
+
   /* ---------------- BACKUP NO GOOGLE DRIVE ---------------- */
   var driveStatus = { txt: '', tipo: '' }, driveTimer = null, emSync = false, driveOcupado = false;
   function dr() { var d = state.drive || (state.drive = {}); d.clientId = d.clientId || ''; d.auto = !!d.auto; d.ultimo = d.ultimo || ''; d.remotoMod = d.remotoMod || ''; return d; }
-  function driveMsg(txt, tipo) { driveStatus = { txt: txt, tipo: tipo || 'info' }; if (tab === 'config') render(); }
+  function driveMsg(txt, tipo) { driveStatus = { txt: txt, tipo: tipo || 'info' }; if (tab === 'config' || tab === 'painel') render(); }
   function driveErro(e) { driveOcupado = false; var m = { offline: 'Sem internet. Seus dados continuam salvos neste aparelho.' }[e && e.codigo]; driveMsg(m || (e && e.message) || 'Algo deu errado no backup.', 'bad'); }
   function pacote() { var c = JSON.parse(JSON.stringify(state)); delete c.drive; return { app: 'estoque-inteligente', versao: 1, salvoEm: new Date().toISOString(), dados: c }; }
   function fmtHora(iso) { return iso ? new Date(iso).toLocaleString('pt-BR') : ''; }
@@ -792,6 +819,7 @@
     else if (act === 'cat-mais') { cat.n += 80; catRefresh(); }
     else if (act === 'novo-alimento') { prefillNome = t.dataset.nome || ''; tab = 'catalogo'; render(); var f = document.getElementById('novoNome'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); } }
     else if (act === 'imprimir') window.print();
+    else if (act === 'backup-dispensar') { state.avisoBackupAte = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
     else if (act === 'drive-conectar') driveConectar();
     else if (act === 'drive-backup') driveBackup(false);
     else if (act === 'drive-restaurar') driveRestaurar();
@@ -974,6 +1002,7 @@
     a.download = 'estoque-inteligente-' + new Date().toISOString().slice(0, 10) + '.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    state.ultimoExport = new Date().toISOString(); save(); if (tab === 'config' || tab === 'painel') render();
   }
   function importar(file) {
     if (!file) return;
