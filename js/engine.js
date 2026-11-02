@@ -107,15 +107,15 @@
     items.sort(function (x, y) { return x.dias - y.dias; });
 
     // validade: cada linha com data, comparar com a data em que seria consumida
-    var alertas = [];
+    var alertas = [], hoje0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()), janela = Math.max(90, Number(state.validadeJanela) || 30);
     lines.forEach(function (l) {
       if (!l.s.validade) return;
       var exp = new Date(l.s.validade + 'T00:00:00');
-      var diasAteVencer = Math.floor((exp - today) / 86400000);
+      var diasAteVencer = Math.round((exp - hoje0) / 86400000);
       var it = items.filter(function (i) { return i.food.id === l.food.id; })[0];
       var consumoDia = it ? it.dias : HUGE;
       if (diasAteVencer < 0) alertas.push({ tipo: 'vencido', food: l.food, dias: diasAteVencer, linha: l.s });
-      else if (diasAteVencer < 90 || diasAteVencer < consumoDia)
+      else if (diasAteVencer < janela || diasAteVencer < consumoDia)
         alertas.push({ tipo: diasAteVencer < consumoDia ? 'vence_antes' : 'proximo', food: l.food, dias: diasAteVencer, linha: l.s, consumo: consumoDia });
     });
     alertas.sort(function (a, b) { return a.dias - b.dias; });

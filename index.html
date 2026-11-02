@@ -15,11 +15,14 @@
 <header class="top">
   <div class="top-in">
     <div class="brand"><span class="logo" aria-hidden="true">🥫</span><div><strong>Estoque Inteligente</strong><small>Quanto tempo a sua despensa dura</small></div></div>
+    <button id="bell" class="bell" type="button" data-act="notif-abrir" aria-label="Notificações" aria-pressed="false"><span aria-hidden="true">🔔</span><span class="badge" hidden>0</span></button>
     <div id="modo" class="seg" role="group" aria-label="Modo de consumo"></div>
   </div>
 </header>
+<div class="layout">
 <nav class="tabs" aria-label="Seções"><div id="tabs" class="tabs-in" role="tablist"></div></nav>
 <main id="view" tabindex="-1"></main>
+</div>
 <footer class="foot">
   Estimativas baseadas em tabelas públicas (TACO/USDA) e valores médios. Não substituem orientação de nutricionista ou médico.
   Seus dados ficam apenas neste navegador.
@@ -31,6 +34,7 @@
 <script src="js/meds.js"></script>
 <script src="js/prontidao.js"></script>
 <script src="js/drive.js"></script>
+<script src="js/financas.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/app.js"></script>
 <script>

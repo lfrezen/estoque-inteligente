@@ -44,7 +44,7 @@ p { margin: 6px 0; }
 /* Cartões */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .card > h3:first-child { display: flex; align-items: center; gap: 8px; }
-.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-bottom: 16px; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 16px; }
 .muted { color: var(--muted); font-size: .88rem; }
 
 /* Hero do painel */
@@ -208,6 +208,46 @@ details.area summary::-webkit-details-marker { display: none; }
 .rel-t.plan td { height: 11mm; vertical-align: top; }
 
 /* Aviso de backup no Painel */
-#avisoBackup { flex-wrap: wrap; margin-bottom: 16px; }
-#avisoBackup > div:nth-child(2) { flex: 1 1 220px; min-width: 0; }
-@media (max-width: 560px) { #avisoBackup > .flex { flex: 0 0 100%; padding-left: 34px; } }
+#avisoBackup, #avisoValidade { flex-wrap: wrap; margin-bottom: 16px; }
+#avisoBackup > div:nth-child(2), #avisoValidade > div:nth-child(2) { flex: 1 1 220px; min-width: 0; }
+@media (max-width: 560px) { #avisoBackup > .flex, #avisoValidade > .flex { flex: 0 0 100%; padding-left: 34px; } }
+
+/* ---------- Ajustes de layout: cabeçalho, menu lateral no desktop, rodapé ---------- */
+:root { --hdr1: #1f5a3e; --hdr2: #2d7a55; }
+@media (prefers-color-scheme: dark) { :root { --hdr1: #143326; --hdr2: #1d4a37; } }
+.top { background: linear-gradient(135deg, var(--hdr1), var(--hdr2)); }
+.top-in, .layout, .foot { max-width: 1160px; }
+.layout { margin: 0 auto; }
+.foot a { color: var(--brand); text-decoration: underline; }
+@media (min-width: 900px) {
+  .top { padding: 14px 24px; }
+  .layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; padding: 0 24px; align-items: start; }
+  .tabs { position: sticky; top: 84px; display: block; padding: 16px 0 24px; overflow: visible; background: transparent; max-height: calc(100vh - 100px); overflow-y: auto; }
+  .tabs-in { flex-direction: column; max-width: none; margin: 0; gap: 3px; }
+  .tabs button { width: 100%; text-align: left; border: 0; background: transparent; padding: 10px 14px; border-radius: 12px; font-size: .95rem; }
+  .tabs button:hover { background: var(--bg2); }
+  .tabs button[aria-selected="true"] { background: var(--brand); color: var(--brand-ink); }
+  main { max-width: none; margin: 0; padding: 20px 0 32px; min-width: 0; }
+  .foot { padding: 8px 24px 40px; }
+}
+@media print { .layout { display: block !important; padding: 0 !important; max-width: none !important; } }
+
+/* Finanças */
+.fin-bars { display: flex; align-items: stretch; gap: 6px; height: 170px; margin-top: 6px; }
+.fin-bar { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; border: 0; background: transparent; cursor: pointer; padding: 0; color: var(--muted); font: inherit; }
+.fin-bar i { display: block; width: 100%; background: var(--brand-soft); border-radius: 6px 6px 0 0; min-height: 3px; transition: background .15s; }
+.fin-bar:hover i { background: var(--brand); opacity: .7; }
+.fin-bar.sel i { background: var(--brand); }
+.fin-bar .v { font-size: .68rem; min-height: 1em; } .fin-bar .l { font-size: .7rem; } .fin-bar.sel .l { color: var(--ink); font-weight: 700; }
+
+/* Sino e central de notificações */
+.top-in .brand { flex: 1; min-width: 0; }
+.bell { position: relative; flex: 0 0 auto; width: 42px; height: 42px; border: 0; border-radius: 50%; background: rgba(255,255,255,.16); color: #fff; font-size: 1.2rem; cursor: pointer; display: grid; place-items: center; transition: background .15s; }
+.bell:hover { background: rgba(255,255,255,.26); }
+.bell[aria-pressed="true"] { background: #fff; }
+.bell .badge { position: absolute; top: -4px; right: -4px; min-width: 21px; height: 21px; padding: 0 5px; border-radius: 99px; background: var(--bad); color: #fff; font-size: .72rem; font-weight: 800; display: grid; place-items: center; border: 2px solid var(--hdr2); line-height: 1; }
+.bell .badge[hidden] { display: none; }
+.bell .badge.medio { background: var(--warn); }
+.notif { margin: 0 0 10px; flex-wrap: wrap; }
+.notif > div:nth-child(2) { flex: 1 1 240px; min-width: 0; }
+@media (max-width: 560px) { .top-in { flex-wrap: wrap; } .bell { order: 2; } .seg { order: 3; } .notif > .flex { flex: 0 0 100%; padding-left: 34px; } }

@@ -1,11 +1,11 @@
 (function () {
   'use strict';
-  var D = window.DATA, E = window.Engine, M = window.MEDS, PRONT = window.PRONT, DRIVE = window.DRIVE;
+  var D = window.DATA, E = window.Engine, M = window.MEDS, PRONT = window.PRONT, DRIVE = window.DRIVE, FIN = window.FIN;
   var KEY = 'estoque-inteligente-v1';
 
   var DEFAULT = {
     versao: 1, modo: 'normal', metaDias: 90, pessoas: [], estoque: [], meds: [], custom: [], porcoes: {},
-    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, atualizado: null, drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
+    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, validadeJanela: 30, atualizado: null, gastos: [], orcamento: 0, drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
   };
   var state = load();
   var tab = 'painel';
@@ -40,7 +40,7 @@
   function fname(f, sub) { return '<div class="fname"><span class="em" aria-hidden="true">' + em(f) + '</span><div>' + esc(f.nome) + (sub ? '<div class="muted">' + sub + '</div>' : '') + '</div></div>'; }
 
   var TABS = [
-    ['painel', '📊 Painel'], ['pessoas', '👨‍👩‍👧 Pessoas'], ['estoque', '📦 Estoque'], ['meds', '💊 Medicamentos'], ['pront', '🧟 Prontidão'], ['compras', '🛒 Compras'],
+    ['painel', '📊 Painel'], ['pessoas', '👨‍👩‍👧 Pessoas'], ['estoque', '📦 Estoque'], ['meds', '💊 Medicamentos'], ['pront', '🧟 Prontidão'], ['compras', '🛒 Compras'], ['financas', '💰 Finanças'],
     ['cardapio', '🍽️ Cardápio'], ['estrategias', '💡 Estratégias'], ['catalogo', '📖 Catálogo'], ['relatorio', '🖨️ Relatório'], ['config', '⚙️ Config e backup']
   ];
 
@@ -54,10 +54,11 @@
   }
 
   function render() {
-    renderChrome();
+    notifCache = notificacoes();
+    renderChrome(); atualizaSino();
     var v = document.getElementById('view');
-    var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, meds: vMeds, pront: vPront, compras: vCompras, cardapio: vCardapio, relatorio: vRelatorio,
-      estrategias: vEstrategias, catalogo: vCatalogo, config: vConfig }[tab];
+    var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, meds: vMeds, pront: vPront, compras: vCompras, financas: vFinancas, cardapio: vCardapio, relatorio: vRelatorio,
+      estrategias: vEstrategias, catalogo: vCatalogo, config: vConfig, notificacoes: vNotificacoes }[tab];
     v.innerHTML = fn();
   }
 
@@ -72,7 +73,6 @@
     var pct = isFinite(d.energia) ? Math.min(100, d.energia / meta * 100) : 100;
     var c = cls(d.energia, meta), R = 70, C = 2 * Math.PI * R;
     var veredito = d.energia >= meta ? 'Meta atingida em calorias 🎉' : d.energia >= meta / 3 ? 'Já tem uma boa base. Ainda falta chegar à meta.' : 'Estoque curto para a meta. Veja a aba Compras.';
-    h += backupAvisoHtml();
     h += '<div class="card hero"><div class="ring ' + c + '" role="img" aria-label="' + n0(pct) + '% da meta">' +
       '<svg viewBox="0 0 168 168"><circle class="trk" cx="84" cy="84" r="' + R + '" fill="none" stroke-width="14"/>' +
       '<circle class="val" cx="84" cy="84" r="' + R + '" fill="none" stroke-width="14" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - pct / 100)).toFixed(1) + '"/></svg>' +
@@ -125,6 +125,14 @@
         }).join('') + '</tbody></table></div><p class="muted">Duração de cada item sozinho, seguindo as porções da aba Catálogo.</p></div>';
     }
 
+    // finanças
+    if (gs().length) {
+      var fm = FIN.mesAtual(), fv = FIN.variacao(gs(), fm);
+      h += '<div class="card"><div class="flex between"><h3>💰 Gastos de ' + FIN.rotuloMes(fm, true) + '</h3><button class="btn sec" type="button" data-tab="financas">Abrir</button></div>' +
+        '<div class="flex between"><span><b style="font-size:1.5rem">' + FIN.brl(fv.atual) + '</b></span><span class="muted">' + (fv.pct === null ? 'sem mês anterior para comparar' : (fv.diff >= 0 ? '▲ ' : '▼ ') + FIN.brl(Math.abs(fv.diff)) + ' vs mês anterior') + '</span></div>' +
+        (Number(state.orcamento) > 0 ? '<div class="bar ' + (fv.atual > state.orcamento ? 'bad' : fv.atual > state.orcamento * 0.8 ? 'warn' : '') + '" style="margin-top:8px"><i style="width:' + Math.min(100, fv.atual / state.orcamento * 100).toFixed(0) + '%"></i></div><p class="muted">' + n0(fv.atual / state.orcamento * 100) + '% do orçamento de ' + FIN.brl(state.orcamento) + '</p>' : '') + '</div>';
+    }
+
     // prontidão
     var psc = PRONT.pontuacao(state, prAuto(an));
     h += '<div class="card"><div class="flex between"><h3>' + psc.nivel.ic + ' Prontidão para emergências</h3><button class="btn sec" type="button" data-tab="pront">Abrir</button></div>' +
@@ -137,15 +145,6 @@
       (mr.total ? '<p>' + mr.total + ' item(ns) · <b' + (mr.vencidos ? ' style="color:var(--bad)"' : '') + '>' + mr.vencidos + ' vencido(s)</b> · ' + mr.atencao + ' vencem em 90 dias · kit essencial ' + mr.essenciaisOk + ' de ' + mr.essenciais + (mr.continuoMin !== null ? ' · uso contínuo dura <b>' + dias(mr.continuoMin) + '</b>' : '') + '.</p>'
         : '<p class="muted">Cadastre seus medicamentos e veja o kit essencial, a validade e dicas para situação extrema.</p>') + '</div>';
 
-    // validade
-    if (an.alertas.length) {
-      h += '<div class="card"><h3>Validade</h3><table><thead><tr><th>Item</th><th>Situação</th></tr></thead><tbody>' +
-        an.alertas.map(function (a) {
-          var txt = a.tipo === 'vencido' ? 'Vencido há ' + Math.abs(a.dias) + ' dia(s)' :
-            a.tipo === 'vence_antes' ? 'Vence em ' + a.dias + ' dia(s), antes de ser consumido (dura ' + dias(a.consumo) + ')' : 'Vence em ' + a.dias + ' dia(s)';
-          return '<tr><td>' + esc(a.food.nome) + '</td><td>' + txt + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
-    }
     return h;
   }
   function kpi(l, v, c, sub, ic) { return '<div class="kpi ' + c + '"><div class="l"><span class="ic" aria-hidden="true">' + (ic || '') + '</span> ' + l + '</div><div class="v">' + v + '</div><div class="l">' + sub + '</div></div>'; }
@@ -229,25 +228,98 @@
       '<div><label for="qtdIn">Quantidade <span id="unitLbl">(kg)</span></label><input id="qtdIn" name="qtd" type="number" min="0" step="any" required></div>' +
       '<div id="pesoWrap" hidden><label for="pesoIn">Peso drenado por unidade (g)</label><input id="pesoIn" name="pesoUn" type="number" min="1" step="any" placeholder="ex.: 179"></div>' +
       '<div><label>Validade (opcional)</label><input name="validade" type="date"></div>' +
-      '<div><button class="btn" type="submit">Adicionar</button></div></form>' +
+      '<div><label for="precoIn">Preço pago (R$, total)</label><input id="precoIn" name="preco" type="number" min="0" step="0.01" placeholder="opcional"></div>' +
+      '<div><label for="dataCompra">Data da compra</label><input id="dataCompra" name="dataCompra" type="date" value="' + FIN.hojeISO() + '"></div>' +
+      '<div><label for="lojaIn">Loja (opcional)</label><input id="lojaIn" name="loja" maxlength="40" list="lojas"></div>' +
+      '<div><button class="btn" type="submit">Adicionar</button></div></form>' + lojasList() +
       '<p class="muted" id="foodHint">' + foods.length + ' alimentos no catálogo. Comece a digitar o nome.</p></div>';
     if (!state.estoque.length) return h + '<div class="empty"><big>📦</big>Estoque vazio. Adicione o primeiro alimento acima.</div>';
     var an = E.analyze(state);
     var byFood = {}; an.items.forEach(function (i) { byFood[i.food.id] = i; });
-    h += '<div class="card"><div class="scroll"><table><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Dura</th><th></th></tr></thead><tbody>' +
+    h += '<div class="card"><div class="scroll"><table><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Preço (R$)</th><th class="num">Dura</th><th></th></tr></thead><tbody>' +
       state.estoque.map(function (s) {
         var f = fm[s.foodId]; if (!f) return '';
-        var kg = E.lineKg(f, s), it = byFood[f.id];
+        var kg = E.lineKg(f, s), it = byFood[f.id], gl = gs().filter(function (x) { return x.estoqueId === s.id; })[0];
         return '<tr><td>' + fname(f) + '</td>' +
           '<td class="num"><input type="number" min="0" step="any" value="' + s.qtd + '" data-act="qtd" data-id="' + s.id + '" style="width:85px" aria-label="Quantidade"> ' + unitLabel(f).replace('(s)', '') +
             (f.un === 'un' ? ' × <input type="number" min="1" step="any" value="' + (Number(s.pesoUn) > 0 ? s.pesoUn : f.gpu) + '" data-act="pesoUn" data-id="' + s.id + '" style="width:72px" aria-label="Peso por unidade em gramas"> g' : '') + '</td>' +
           '<td class="num">' + n1(kg * f.rend) + '</td><td class="num">' + n0(kg * 10 * f.kcal) + '</td>' +
           '<td><input type="date" value="' + esc(s.validade || '') + '" data-act="validade" data-id="' + s.id + '"></td>' +
+          '<td class="num"><input type="number" min="0" step="0.01" value="' + (gl ? gl.preco : '') + '" data-act="gasto-preco" data-id="' + s.id + '" style="width:84px" placeholder="R$" aria-label="Preço pago">' + (gl ? '<div class="muted">' + unitPreco(gl) + ' · ' + new Date(gl.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + '</div>' : '') + '</td>' +
           '<td class="num">' + (it && it.porDiaKg > 0 ? dias(it.dias) : '—') + '</td>' +
           '<td><button class="btn del" data-act="del-estoque" data-id="' + s.id + '">×</button></td></tr>';
-      }).join('') + '</tbody></table></div></div>';
+      }).join('') + '</tbody></table></div><p class="muted">Remover um item do estoque <b>não apaga o gasto</b> registrado: para apagar, use a aba Finanças.</p></div>';
     return h;
   }
+
+  /* ---------------- FINANÇAS ---------------- */
+  var finMes = FIN.mesAtual(), finFood = '';
+  function gs() { return state.gastos || (state.gastos = []); }
+  function seta(p) { return p === null ? '' : p > 0.5 ? ' <span style="color:var(--bad)">▲ ' + n1(p) + '%</span>' : p < -0.5 ? ' <span style="color:var(--ok)">▼ ' + n1(Math.abs(p)) + '%</span>' : ' <span class="muted">= </span>'; }
+  function unitPreco(g) { var pk = FIN.precoKg(g), pu = FIN.precoUn(g); return g.un === 'un' && pu !== null ? FIN.brl(pu) + '/un' : pk !== null ? FIN.brl(pk) + '/kg' : '—'; }
+  function qtdGasto(g) { return g.qtd > 0 ? n1(g.qtd) + ' ' + ({ kg: 'kg', l: 'L', un: 'un' }[g.un] || '') : '—'; }
+  function vFinancas() {
+    var g = gs(), m = finMes, hoje = new Date(), tot = FIN.total(g, m), v = FIN.variacao(g, m), lista = FIN.doMes(g, m);
+    var dias = m === FIN.mesAtual(hoje) ? hoje.getDate() : FIN.diasDoMes(m), orc = Number(state.orcamento) || 0;
+    var h = '<h2>Finanças</h2><p class="muted">Cada compra é uma entrada, mesmo do mesmo alimento em datas diferentes. Informe o preço ao cadastrar o estoque ou lance gastos avulsos aqui.</p>';
+    h += '<div class="card"><div class="form"><div><label for="finMes">Mês</label><input id="finMes" type="month" value="' + m + '" data-act="fin-mes"></div>' +
+      '<div><label for="finOrc">Orçamento mensal (R$, opcional)</label><input id="finOrc" type="number" min="0" step="0.01" value="' + (orc || '') + '" data-act="fin-orc" placeholder="ex.: 1500"></div></div></div>';
+    if (!g.length) return h + '<div class="empty"><big>💰</big>Nenhum gasto registrado ainda. Informe o <b>preço pago</b> ao adicionar alimentos no Estoque, ou lance um gasto avulso abaixo.</div>' + finForm();
+    h += '<div class="grid">' + kpi('Gasto em ' + FIN.rotuloMes(m, true), FIN.brl(tot), 'ok', n0(lista.length) + ' compra(s)', '💰') +
+      kpi('Média por dia', FIN.brl(tot / dias), 'ok', 'em ' + dias + ' dia(s)', '📆') +
+      kpi('Mês anterior', FIN.brl(v.anterior), 'ok', v.pct === null ? 'sem dados' : (v.diff >= 0 ? '+' : '−') + FIN.brl(Math.abs(v.diff)) + ' (' + (v.pct >= 0 ? '+' : '−') + n0(Math.abs(v.pct)) + '%)', '↔️') +
+      (orc > 0 ? kpi('Orçamento', n0(tot / orc * 100) + '%', tot > orc ? 'bad' : tot > orc * 0.8 ? 'warn' : 'ok', tot > orc ? 'estourou em ' + FIN.brl(tot - orc) : 'restam ' + FIN.brl(orc - tot), '🎯') : '') + '</div>';
+    if (orc > 0) h += '<div class="bar ' + (tot > orc ? 'bad' : tot > orc * 0.8 ? 'warn' : '') + '" style="margin:-4px 0 16px"><i style="width:' + Math.min(100, tot / orc * 100).toFixed(0) + '%"></i></div>';
+
+    var ser = FIN.serie(g, m, 12), max = Math.max.apply(null, ser.map(function (x) { return x.total; }).concat([1]));
+    h += '<div class="card"><h3>📊 Últimos 12 meses</h3><div class="fin-bars">' + ser.map(function (x) {
+      return '<button type="button" class="fin-bar' + (x.mes === m ? ' sel' : '') + '" data-act="fin-sel" data-m="' + x.mes + '" title="' + FIN.rotuloMes(x.mes, true) + ': ' + FIN.brl(x.total) + '">' +
+        '<span class="v">' + (x.total ? n0(x.total) : '') + '</span><i style="height:' + (x.total / max * 100).toFixed(0) + '%"></i><span class="l">' + FIN.rotuloMes(x.mes) + '</span></button>';
+    }).join('') + '</div><p class="muted">Toque numa barra para ver o mês. Valores em R$.</p></div>';
+
+    var cats = FIN.porCategoria(g, m, D.GRUPOS);
+    if (cats.length) h += '<div class="card"><h3>🧺 Onde foi o dinheiro em ' + FIN.rotuloMes(m, true) + '</h3>' + cats.map(function (c) {
+      return '<div class="meal"><div class="flex between"><span>' + esc(c.nome) + '</span><span class="muted">' + FIN.brl(c.total) + ' · ' + n0(c.total / tot * 100) + '%</span></div><div class="bar"><i style="width:' + (c.total / tot * 100).toFixed(0) + '%"></i></div></div>';
+    }).join('') + '</div>';
+
+    h += '<div class="card"><div class="flex between"><h3>🧾 Compras de ' + FIN.rotuloMes(m, true) + '</h3><button class="btn sec" type="button" data-act="fin-csv">⬇️ Exportar tudo (CSV)</button></div>';
+    if (!lista.length) h += '<p class="muted">Nenhuma compra neste mês.</p>';
+    else h += '<div class="scroll"><table><thead><tr><th>Data</th><th>Item</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th><th class="num">Preço unit.</th><th>Loja</th><th></th></tr></thead><tbody>' +
+      lista.slice().sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); }).map(function (x) {
+        return '<tr><td><input type="date" value="' + esc(x.data) + '" data-act="fin-edit" data-k="data" data-id="' + x.id + '" aria-label="Data"></td>' +
+          '<td>' + esc(x.nome) + '<div class="muted">' + esc(FIN.rotuloGrupo(x, D.GRUPOS)) + '</div></td><td class="num">' + qtdGasto(x) + '</td>' +
+          '<td class="num"><input type="number" min="0" step="0.01" value="' + x.preco + '" data-act="fin-edit" data-k="preco" data-id="' + x.id + '" style="width:90px" aria-label="Valor"></td>' +
+          '<td class="num">' + unitPreco(x) + '</td><td><input value="' + esc(x.loja || '') + '" data-act="fin-edit" data-k="loja" data-id="' + x.id + '" maxlength="40" style="width:110px" aria-label="Loja"></td>' +
+          '<td><button class="btn del" type="button" data-act="fin-del" data-id="' + x.id + '">×</button></td></tr>';
+      }).join('') + '<tr><td colspan="3"><b>Total do mês</b></td><td class="num"><b>' + FIN.brl(tot) + '</b></td><td colspan="3"></td></tr></tbody></table></div>';
+    h += '</div>';
+
+    // histórico de preço por alimento
+    var ids = {}; g.forEach(function (x) { if (x.foodId && x.kg > 0 && x.preco > 0) ids[x.foodId] = x.nome; });
+    var idl = Object.keys(ids).sort(function (a, b) { return ids[a].localeCompare(ids[b], 'pt-BR'); });
+    if (idl.length) {
+      if (!finFood || !ids[finFood]) finFood = idl[0];
+      var rs = FIN.resumoPreco(g, finFood), hist = FIN.historico(g, finFood);
+      h += '<div class="card"><h3>📈 Histórico de preço</h3><div class="form"><div><label for="finFood">Alimento</label><select id="finFood" data-act="fin-food">' + idl.map(function (i) { return '<option value="' + i + '"' + (i === finFood ? ' selected' : '') + '>' + esc(ids[i]) + '</option>'; }).join('') + '</select></div></div>';
+      if (rs) h += '<div class="grid" style="margin-top:12px">' + kpi('Último', FIN.brl(rs.ultimo) + '/kg', 'ok', rs.variacao === null ? 'primeira compra' : (rs.variacao >= 0 ? '+' : '−') + n1(Math.abs(rs.variacao)) + '% vs compra anterior', '🏷️') +
+        kpi('Mais barato', FIN.brl(rs.min) + '/kg', 'ok', 'média ' + FIN.brl(rs.media) + '/kg', '👍') + kpi('Mais caro', FIN.brl(rs.max) + '/kg', 'warn', n0(rs.n) + ' compra(s)', '👎') + '</div>';
+      h += '<div class="scroll"><table><thead><tr><th>Data</th><th>Loja</th><th class="num">Qtd.</th><th class="num">Valor</th><th class="num">R$/kg</th></tr></thead><tbody>' + hist.slice().reverse().map(function (x, i, arr) {
+        var ant = arr[i + 1], var_ = ant && ant.porKg ? (x.porKg - ant.porKg) / ant.porKg * 100 : null;
+        return '<tr><td>' + new Date(x.gasto.data + 'T00:00:00').toLocaleDateString('pt-BR') + '</td><td>' + esc(x.gasto.loja || '—') + '</td><td class="num">' + qtdGasto(x.gasto) + '</td><td class="num">' + FIN.brl(x.gasto.preco) + '</td><td class="num">' + (x.porKg !== null ? FIN.brl(x.porKg) + seta(var_) : '—') + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+    }
+    return h + finForm();
+  }
+  function finForm() {
+    return '<details class="card area"><summary><span>➕ <b>Lançar gasto avulso</b> (água, gás, remédios, outros)</span></summary><form class="form" data-form="gasto" style="margin-top:10px">' +
+      '<div><label for="gDesc">Descrição</label><input id="gDesc" name="nome" required maxlength="60" placeholder="ex.: Galão de água 20 L"></div>' +
+      '<div><label for="gCat">Categoria</label><select id="gCat" name="categoria">' + Object.keys(FIN.CATEGORIAS).map(function (k) { return '<option value="' + k + '">' + FIN.CATEGORIAS[k] + '</option>'; }).join('') + '</select></div>' +
+      '<div><label for="gVal">Valor (R$)</label><input id="gVal" name="preco" type="number" min="0.01" step="0.01" required></div>' +
+      '<div><label for="gData">Data</label><input id="gData" name="data" type="date" value="' + FIN.hojeISO() + '" required></div>' +
+      '<div><label for="gLoja">Loja (opcional)</label><input id="gLoja" name="loja" maxlength="40" list="lojas"></div>' +
+      '<div><button class="btn" type="submit">Lançar</button></div></form></details>' + lojasList();
+  }
+  function lojasList() { var s = {}; gs().forEach(function (x) { if (x.loja) s[x.loja] = 1; }); return '<datalist id="lojas">' + Object.keys(s).map(function (l) { return '<option value="' + esc(l) + '">'; }).join('') + '</datalist>'; }
 
   /* ---------------- MEDICAMENTOS ---------------- */
   var medPre = '';
@@ -458,6 +530,14 @@
         '<p>As porções do catálogo cobrem <b>' + n0(cp.cobertura) + '%</b> das calorias da casa. Faltam <b>' + n0(cp.kcalDia) + ' kcal por dia</b> (' + n0(cp.kcalTotal / 1000) + ' mil kcal em ' + meta + ' dias).</p>' +
         '<p>Para fechar, aumente as porções no Catálogo ou some alimentos baratos e duradouros. Em arroz, seriam cerca de <b>' + n0(cp.arrozKg) + ' kg</b> a mais, ou o equivalente em macarrão, farinha, feijão, óleo e açúcar. O ideal é dividir entre vários alimentos, não só arroz.</p>' +
         '<p class="muted">Este valor não está incluído nas linhas acima.</p></div>';
+    }
+    // custo estimado com os últimos preços pagos
+    if (gs().length) {
+      var es = FIN.estimativa(dp.rows, gs());
+      if (es.itens.length) h += '<div class="card"><h3>💰 Custo estimado para completar</h3><p>Com os últimos preços que você pagou, completar a lista acima custa cerca de <b>' + FIN.brl(es.total) + '</b>.' + (es.semPreco ? ' <span class="muted">(' + es.semPreco + ' item(ns) sem preço registrado não entraram na conta.)</span>' : '') + '</p>' +
+        '<div class="scroll"><table><thead><tr><th>Item</th><th class="num">Falta</th><th class="num">Último preço</th><th class="num">Custo</th></tr></thead><tbody>' + es.itens.slice(0, 8).map(function (x) {
+          return '<tr><td>' + fname(x.food) + '</td><td class="num">' + n1(x.faltaKg) + ' kg</td><td class="num">' + FIN.brl(x.precoKg) + '/kg</td><td class="num"><b>' + FIN.brl(x.custo) + '</b></td></tr>';
+        }).join('') + '</tbody></table></div></div>';
     }
     // água e gás
     var an = E.analyze(state);
@@ -681,7 +761,77 @@
     return h;
   }
 
-  /* ---------------- AVISO DE BACKUP NO PAINEL ---------------- */
+  /* ---------------- CENTRAL DE NOTIFICAÇÕES ---------------- */
+  var NOTIF_CATS = { validade: { nome: 'Validade', ic: '📅' }, saude: { nome: 'Medicamentos', ic: '💊' }, backup: { nome: 'Backup', ic: '☁️' }, financas: { nome: 'Finanças', ic: '💰' }, prontidao: { nome: 'Prontidão', ic: '🧟' } };
+  var NIVEL_ORD = { alto: 0, medio: 1, info: 2 };
+  var notifCache = [];
+  function quandoDias(d) { return d < 0 ? 'vencido há ' + Math.abs(d) + (Math.abs(d) === 1 ? ' dia' : ' dias') : d === 0 ? 'vence hoje' : d === 1 ? 'vence amanhã' : 'vence em ' + d + ' dias'; }
+  function notificacoes() {
+    var an = E.analyze(state), hoje = new Date(), h0 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()), W = Math.max(1, Number(state.validadeJanela) || 30), out = [], off = state.notifOff || {};
+    // validade dos alimentos
+    an.alertas.forEach(function (a) {
+      var dias = Math.round((new Date(a.linha.validade + 'T00:00:00') - h0) / 86400000);
+      if (!(dias < 0 || dias <= W)) return;
+      var antes = dias >= 0 && isFinite(a.consumo) && a.consumo !== undefined && dias < a.consumo;
+      out.push({ id: 'val:a:' + a.linha.id, cat: 'validade', nivel: dias < 0 ? 'alto' : dias <= 7 ? 'medio' : 'info', ic: dias < 0 ? '⛔' : '⏳', ordem: dias,
+        titulo: a.food.nome.replace(/ \(.*\)/, '') + ' (' + n1(a.linha.qtd) + ' ' + ({ kg: 'kg', l: 'L', un: 'un' }[a.food.un] || '') + ')',
+        txt: quandoDias(dias) + (antes ? '. O estoque dura mais que a validade: consuma primeiro.' : '.'), acao: ['Ver estoque', 'tab', 'estoque'] });
+    });
+    // validade e reposição dos medicamentos
+    (state.meds || []).forEach(function (m) {
+      var av = M.avaliar(m, hoje);
+      if (av.dias !== null && (av.dias < 0 || av.dias <= W))
+        out.push({ id: 'val:m:' + m.id, cat: 'validade', nivel: av.dias < 0 ? 'alto' : av.dias <= 7 ? 'medio' : 'info', ic: av.dias < 0 ? '⛔' : '⏳', ordem: av.dias, titulo: m.nome + ' (medicamento)',
+          txt: quandoDias(av.dias) + (av.dias < 0 ? '. ' + NIVEL_TXT[av.nivel] + '.' : '.'), acao: ['Ver medicamentos', 'tab', 'meds'] });
+      var du = M.duracao(m);
+      if (du !== null && du < 15)
+        out.push({ id: 'saude:rep:' + m.id, cat: 'saude', nivel: du < 7 ? 'alto' : 'medio', ic: '🔁', ordem: du, titulo: 'Reposição: ' + m.nome, txt: 'A reserva de uso contínuo dura cerca de ' + dias(du) + '. Peça a receita e reponha.', acao: ['Ver medicamentos', 'tab', 'meds'] });
+    });
+    // backup
+    var b = backupAviso();
+    if (b && b.nivel !== 'ok') out.push({ id: 'backup', cat: 'backup', nivel: b.nivel, ic: b.ic, ordem: -1, titulo: 'Backup', txt: b.txt, acao: b.btn });
+    // revisão do kit de emergência
+    var dr0 = PRONT.diasDesdeRevisao(state, hoje);
+    if (dr0 !== null && dr0 > 180) out.push({ id: 'pront:rev', cat: 'prontidao', nivel: 'medio', ic: '🔁', ordem: 0, titulo: 'Revisão do kit de emergência', txt: 'A última revisão foi há ' + dr0 + ' dias. Confira validades, pilhas, água e a mochila de fuga.', acao: ['Abrir Prontidão', 'tab', 'pront'] });
+    // orçamento do mês
+    var orc = Number(state.orcamento) || 0;
+    if (orc > 0) {
+      var tot = FIN.total(gs(), FIN.mesAtual(hoje));
+      if (tot > orc * 0.8) out.push({ id: 'fin:orc:' + FIN.mesAtual(hoje) + (tot > orc ? ':estourou' : ''), cat: 'financas', nivel: tot > orc ? 'alto' : 'medio', ic: '🎯', ordem: 0, titulo: tot > orc ? 'Orçamento do mês estourado' : 'Orçamento do mês quase no limite',
+        txt: 'Você gastou ' + FIN.brl(tot) + ' de ' + FIN.brl(orc) + ' (' + n0(tot / orc * 100) + '%).', acao: ['Ver finanças', 'tab', 'financas'] });
+    }
+    out = out.filter(function (n) { return !off[n.cat]; });
+    out.sort(function (x, y) { return NIVEL_ORD[x.nivel] - NIVEL_ORD[y.nivel] || x.ordem - y.ordem; });
+    return out;
+  }
+  function adiada(n) { var t = state.notifAdiar && state.notifAdiar[n.id]; return !!t && new Date(t).getTime() > Date.now(); }
+  function notifBtn(a) { return a ? '<button class="btn sec" type="button" data-' + (a[1] === 'tab' ? 'tab' : 'act') + '="' + a[2] + '">' + esc(a[0]) + '</button>' : ''; }
+  function vNotificacoes() {
+    var N = notifCache, ativas = N.filter(function (n) { return !adiada(n); }), adiadas = N.filter(adiada), h = '<h2>🔔 Notificações</h2>';
+    if (!ativas.length) h += '<div class="empty"><big>✅</big>Tudo em dia. Nenhum aviso no momento.</div>';
+    else {
+      h += '<div class="flex between" style="margin-bottom:10px"><span class="muted">' + ativas.length + ' aviso(s)</span><button class="btn sec" type="button" data-act="notif-adiar-todas">Adiar todos por 1 dia</button></div>';
+      h += ativas.map(function (n) {
+        return '<div class="sug ' + n.nivel + ' notif"><span class="ic" aria-hidden="true">' + n.ic + '</span><div style="flex:1;min-width:0"><b>' + esc(n.titulo) + '</b>' + esc(n.txt) +
+          ' <span class="tag est">' + NOTIF_CATS[n.cat].ic + ' ' + NOTIF_CATS[n.cat].nome + '</span></div><div class="flex">' + notifBtn(n.acao) + '<button class="btn sec" type="button" data-act="notif-adiar" data-id="' + esc(n.id) + '" title="Esconder por 1 dia">Adiar</button></div></div>';
+      }).join('');
+    }
+    if (adiadas.length) h += '<details class="card area"><summary><span>😴 <b>Adiadas</b></span><span class="muted">' + adiadas.length + '</span></summary>' + adiadas.map(function (n) {
+      return '<div class="flex between" style="padding:6px 0;border-top:1px solid var(--line)"><span>' + n.ic + ' ' + esc(n.titulo) + ' <span class="muted">· volta amanhã</span></span><button class="btn sec" type="button" data-act="notif-reativar" data-id="' + esc(n.id) + '">Reativar</button></div>';
+    }).join('') + '</details>';
+    h += '<details class="card area"><summary><span>⚙️ <b>Quais avisos receber</b></span></summary><div style="margin-top:10px">' + Object.keys(NOTIF_CATS).map(function (k) {
+      return '<label style="display:flex;gap:8px;align-items:center;color:var(--ink);padding:4px 0"><input type="checkbox" data-act="notif-cat" data-k="' + k + '"' + (!(state.notifOff || {})[k] ? ' checked' : '') + ' style="width:auto"> ' + NOTIF_CATS[k].ic + ' ' + NOTIF_CATS[k].nome + '</label>';
+    }).join('') + '<div class="form" style="margin-top:8px"><div><label for="notifJanela">Avisar vencimentos com (dias)</label><input id="notifJanela" type="number" min="1" max="365" step="1" value="' + (Number(state.validadeJanela) || 30) + '" data-act="cfg" data-k="validadeJanela"></div></div></div></details>';
+    return h + '<p class="muted">O app só confere os avisos quando está aberto: ele não envia notificações de celular com o app fechado.</p>';
+  }
+  function atualizaSino() {
+    var bell = document.getElementById('bell'); if (!bell) return;
+    var ativas = notifCache.filter(function (n) { return !adiada(n); }), alto = ativas.some(function (n) { return n.nivel === 'alto'; }), bd = bell.querySelector('.badge');
+    bd.hidden = !ativas.length; bd.textContent = ativas.length > 9 ? '9+' : String(ativas.length); bd.className = 'badge' + (alto ? '' : ' medio');
+    bell.setAttribute('aria-label', 'Notificações' + (ativas.length ? ' (' + ativas.length + ' novas)' : '')); bell.setAttribute('aria-pressed', String(tab === 'notificacoes'));
+  }
+
+  /* ---------------- ESTADO DO BACKUP (usado pelas notificações) ---------------- */
   function backupAviso() {
     var d = dr(), tem = (state.pessoas || []).length + (state.estoque || []).length + (state.meds || []).length;
     if (!tem) return null;
@@ -698,19 +848,11 @@
     if (dias > 7) return { nivel: 'medio', ic: '🕒', txt: 'Seu último backup foi ' + quando(melhor) + '. Vale fazer um novo.', btn: ['Fazer backup', 'tab', 'config'] };
     return { nivel: 'ok', ic: '✅', txt: 'Backup em dia: o último foi ' + quando(melhor) + (ult >= exp ? ' (Google Drive)' : ' (arquivo)') + '.' };
   }
-  function backupAvisoHtml() {
-    var a = backupAviso(); if (!a) return '';
-    if (a.nivel !== 'ok' && !a.urgente && state.avisoBackupAte && new Date(state.avisoBackupAte).getTime() > Date.now()) return '';
-    var btn = a.btn ? '<button class="btn sec" type="button" data-' + (a.btn[1] === 'tab' ? 'tab' : 'act') + '="' + a.btn[2] + '">' + a.btn[0] + '</button>' : '';
-    var dispensar = a.nivel !== 'ok' && !a.urgente ? '<button class="btn sec" type="button" data-act="backup-dispensar" title="Esconder por 1 dia">Depois</button>' : '';
-    return '<div class="sug ' + a.nivel + '" id="avisoBackup"><span class="ic" aria-hidden="true">' + a.ic + '</span><div style="flex:1"><b>Backup</b>' + esc(a.txt) + '</div>' +
-      ((btn || dispensar) ? '<div class="flex" style="align-self:center">' + btn + dispensar + '</div>' : '') + '</div>';
-  }
 
   /* ---------------- BACKUP NO GOOGLE DRIVE ---------------- */
   var driveStatus = { txt: '', tipo: '' }, driveTimer = null, emSync = false, driveOcupado = false;
   function dr() { var d = state.drive || (state.drive = {}); d.clientId = d.clientId || ''; d.auto = !!d.auto; d.ultimo = d.ultimo || ''; d.remotoMod = d.remotoMod || ''; return d; }
-  function driveMsg(txt, tipo) { driveStatus = { txt: txt, tipo: tipo || 'info' }; if (tab === 'config' || tab === 'painel') render(); }
+  function driveMsg(txt, tipo) { driveStatus = { txt: txt, tipo: tipo || 'info' }; if (tab === 'config' || tab === 'notificacoes') render(); }
   function driveErro(e) { driveOcupado = false; var m = { offline: 'Sem internet. Seus dados continuam salvos neste aparelho.' }[e && e.codigo]; driveMsg(m || (e && e.message) || 'Algo deu errado no backup.', 'bad'); }
   function pacote() { var c = JSON.parse(JSON.stringify(state)); delete c.drive; return { app: 'estoque-inteligente', versao: 1, salvoEm: new Date().toISOString(), dados: c }; }
   function fmtHora(iso) { return iso ? new Date(iso).toLocaleString('pt-BR') : ''; }
@@ -793,6 +935,7 @@
       '<div><label>Água armazenada (litros)</label><input type="number" min="0" step="any" value="' + state.aguaL + '" data-act="cfg" data-k="aguaL"></div>' +
       '<div><label>Água de higiene (L/pessoa/dia)</label><input type="number" min="0" step="any" value="' + state.aguaHigiene + '" data-act="cfg" data-k="aguaHigiene"></div>' +
       '<div><label>Gás armazenado (kg)</label><input type="number" min="0" step="any" value="' + state.gasKg + '" data-act="cfg" data-k="gasKg"></div>' +
+      '<div><label>Avisar vencimentos com (dias)</label><input type="number" min="1" max="365" step="1" value="' + (Number(state.validadeJanela) || 30) + '" data-act="cfg" data-k="validadeJanela"></div>' +
       '<div><label>Consumo do fogão (kg/h)</label><input type="number" min="0.05" step="0.05" value="' + state.fogaoKgH + '" data-act="cfg" data-k="fogaoKgH"></div></div>' +
       '<p class="muted">Botijão de 13 kg equivale a 13 kg de gás. Um queimador comum consome cerca de 0,2 kg/h. A estimativa de gás considera apenas o tempo de fogo dos alimentos que exigem cozimento.</p></div>';
     h += driveCard();
@@ -819,7 +962,13 @@
     else if (act === 'cat-mais') { cat.n += 80; catRefresh(); }
     else if (act === 'novo-alimento') { prefillNome = t.dataset.nome || ''; tab = 'catalogo'; render(); var f = document.getElementById('novoNome'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); } }
     else if (act === 'imprimir') window.print();
-    else if (act === 'backup-dispensar') { state.avisoBackupAte = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
+    else if (act === 'fin-sel') { finMes = t.dataset.m; render(); }
+    else if (act === 'fin-del') { if (confirm('Apagar este gasto do histórico?')) { state.gastos = gs().filter(function (x) { return x.id !== id; }); save(); render(); } }
+    else if (act === 'fin-csv') baixarCsv();
+    else if (act === 'notif-abrir') { tab = 'notificacoes'; render(); window.scrollTo(0, 0); }
+    else if (act === 'notif-adiar') { (state.notifAdiar = state.notifAdiar || {})[id] = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
+    else if (act === 'notif-reativar') { if (state.notifAdiar) delete state.notifAdiar[id]; save(); render(); }
+    else if (act === 'notif-adiar-todas') { state.notifAdiar = state.notifAdiar || {}; var ate = new Date(Date.now() + 86400000).toISOString(); notifCache.forEach(function (n) { state.notifAdiar[n.id] = ate; }); save(); render(); }
     else if (act === 'drive-conectar') driveConectar();
     else if (act === 'drive-backup') driveBackup(false);
     else if (act === 'drive-restaurar') driveRestaurar();
@@ -840,6 +989,17 @@
     var t = e.target;
     var act = t.dataset && t.dataset.act; if (!act) return;
     if (act === 'drive-cfg') { var dc = dr(); if (t.dataset.k === 'auto') { dc.auto = t.checked; save(); render(); if (dc.auto) agendarDrive(); } else { dc.clientId = t.value.trim(); save(); } return; }
+    if (act === 'notif-cat') { state.notifOff = state.notifOff || {}; state.notifOff[t.dataset.k] = !t.checked; save(); render(); return; }
+    if (act === 'fin-mes') { if (t.value) { finMes = t.value; render(); } return; }
+    if (act === 'fin-orc') { state.orcamento = Math.max(0, Number(t.value) || 0); save(); render(); return; }
+    if (act === 'fin-food') { finFood = t.value; render(); return; }
+    if (act === 'fin-edit') { var ge = find(gs(), t.dataset.id); if (ge) { var k = t.dataset.k; ge[k] = k === 'preco' ? Math.max(0, Number(t.value) || 0) : t.value; if (k === 'preco' && !(ge.preco > 0)) state.gastos = gs().filter(function (x) { return x !== ge; }); save(); render(); } return; }
+    if (act === 'gasto-preco') {
+      var sl = find(state.estoque, t.dataset.id), vv = Number(t.value) || 0, gl2 = gs().filter(function (x) { return x.estoqueId === t.dataset.id; })[0], f2 = sl && E.foodMap(E.allFoods(state))[sl.foodId];
+      if (gl2) { if (vv > 0) gl2.preco = vv; else state.gastos = gs().filter(function (x) { return x !== gl2; }); }
+      else if (vv > 0 && sl && f2) gs().push({ id: uid(), tipo: 'estoque', estoqueId: sl.id, foodId: sl.foodId, nome: f2.nome, grupo: f2.grupo, qtd: sl.qtd, un: f2.un, kg: E.lineKg(f2, sl), preco: vv, data: FIN.hojeISO(), loja: '' });
+      save(); render(); return;
+    }
     if (act === 'pr-chk') { pr().marcados[t.dataset.id] = t.checked; save(); render(); return; }
     if (act === 'pr-ctx') { var kx = t.dataset.k; pr()[kx] = kx === 'carro' ? t.checked : kx === 'pets' ? Math.max(0, Number(t.value) || 0) : t.value; save(); render(); return; }
     if (act === 'pr-plano') { pr().plano[t.dataset.k] = t.value; save(); prUpdateScore(); return; }
@@ -872,7 +1032,15 @@
       if (!(qtd > 0)) return;
       focusSearch = true;
       var ff = E.foodMap(E.allFoods(state))[fid], peso = Number(fd.get('pesoUn'));
-      state.estoque.push({ id: uid(), foodId: fid, qtd: qtd, pesoUn: ff && ff.un === 'un' && peso > 0 ? peso : 0, validade: fd.get('validade') || '' });
+      var linha = { id: uid(), foodId: fid, qtd: qtd, pesoUn: ff && ff.un === 'un' && peso > 0 ? peso : 0, validade: fd.get('validade') || '' };
+      state.estoque.push(linha);
+      var preco = Number(fd.get('preco'));
+      if (preco > 0 && ff) gs().push({ id: uid(), tipo: 'estoque', estoqueId: linha.id, foodId: fid, nome: ff.nome, grupo: ff.grupo, qtd: qtd, un: ff.un, kg: E.lineKg(ff, linha), preco: preco, data: fd.get('dataCompra') || FIN.hojeISO(), loja: String(fd.get('loja') || '').trim() });
+    } else if (kind === 'gasto') {
+      var vl = Number(fd.get('preco')), ds = String(fd.get('nome') || '').trim();
+      if (!(vl > 0) || !ds) return;
+      gs().push({ id: uid(), tipo: 'manual', categoria: fd.get('categoria'), nome: ds, qtd: 0, un: '', kg: 0, preco: vl, data: fd.get('data') || FIN.hojeISO(), loja: String(fd.get('loja') || '').trim() });
+      if (fd.get('data')) finMes = FIN.mes(fd.get('data'));
     } else if (kind === 'med') {
       var cat = M.catPorId(fd.get('cat')), nm = String(fd.get('nome') || '').trim() || (cat ? cat.nome : '');
       if (!nm) return;
@@ -995,6 +1163,11 @@
   var focusSearch = false;
   render = function () { origRender(); if (tab === 'estoque') { updateFoodHint(); if (focusSearch) { focusSearch = false; var q = document.getElementById('foodQ'); if (q) q.focus(); } } };
 
+  function baixarCsv() {
+    var blob = new Blob([FIN.csv(gs(), D.GRUPOS)], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'estoque-gastos-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
   function exportar() {
     var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     var a = document.createElement('a');
@@ -1002,7 +1175,7 @@
     a.download = 'estoque-inteligente-' + new Date().toISOString().slice(0, 10) + '.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-    state.ultimoExport = new Date().toISOString(); save(); if (tab === 'config' || tab === 'painel') render();
+    state.ultimoExport = new Date().toISOString(); save(); if (tab === 'config' || tab === 'notificacoes') render();
   }
   function importar(file) {
     if (!file) return;
