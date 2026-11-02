@@ -3,6 +3,9 @@
    drive.appdata: a pasta oculta do aplicativo. O app só enxerga o arquivo que ele mesmo criou, nunca o resto do Drive.
    O token de acesso fica só na memória (expira em cerca de 1 hora) e nunca é gravado. */
 (function (root) {
+  /* ID de cliente OAuth do app (público por natureza: não é segredo; só vale nas origens autorizadas no Google Cloud).
+     Quem hospedar o próprio site pode trocar por outro ID na tela de configuração. */
+  var ID_PADRAO = '123288636103-k55hebl3lti48m6f1c8d0kdh08ip81ch.apps.googleusercontent.com';
   var ESCOPO = 'https://www.googleapis.com/auth/drive.appdata';
   var ARQUIVO = 'estoque-inteligente-backup.json';
   var token = null, expira = 0, clienteId = '';
@@ -21,8 +24,7 @@
   }
 
   function conectar(id) {
-    id = String(id || '').trim();
-    if (!id) return Promise.reject(erro('config', 'Informe o ID do cliente Google (veja "Como configurar").'));
+    id = String(id || '').trim() || ID_PADRAO;
     return carregarGIS().then(function () {
       return new Promise(function (res, rej) {
         var c = root.google.accounts.oauth2.initTokenClient({
@@ -51,8 +53,8 @@
       if (r.ok) return r;
       if (r.status === 401) { token = null; throw erro('auth', 'Sessão expirada. Clique em Conectar de novo.'); }
       return r.text().then(function (t) {
-        if (r.status === 403 && /(accessNotConfigured|has not been used|is disabled|SERVICE_DISABLED)/i.test(t)) throw erro('api', 'A Google Drive API não está ativada no seu projeto. Veja "Como configurar", passo 2.');
-        if (r.status === 403) throw erro('permissao', 'O Google negou a permissão. Confira se o seu e-mail está como usuário de teste e autorize de novo.');
+        if (r.status === 403 && /(accessNotConfigured|has not been used|is disabled|SERVICE_DISABLED)/i.test(t)) throw erro('api', 'A Google Drive API não está ativada no projeto Google deste app. Quem mantém o app precisa ativá-la em APIs e serviços → Biblioteca.');
+        if (r.status === 403) throw erro('permissao', 'O Google negou a permissão. Se o app ainda está em modo de teste, o seu e-mail precisa estar na lista de usuários de teste do projeto.');
         throw erro('http', 'O Drive respondeu com erro ' + r.status + '.');
       });
     }, function () { throw erro('offline', 'Sem internet. Seus dados continuam salvos neste aparelho.'); });
@@ -88,6 +90,6 @@
     try { if (t && root.google && root.google.accounts && root.google.accounts.oauth2.revoke) root.google.accounts.oauth2.revoke(t, function () {}); } catch (e) { /* ignora */ }
   }
 
-  var api = { ARQUIVO: ARQUIVO, ESCOPO: ESCOPO, conectar: conectar, temToken: temToken, expiraEm: expiraEm, info: info, salvar: salvar, baixar: baixar, desconectar: desconectar };
+  var api = { ID_PADRAO: ID_PADRAO, ARQUIVO: ARQUIVO, ESCOPO: ESCOPO, conectar: conectar, temToken: temToken, expiraEm: expiraEm, info: info, salvar: salvar, baixar: baixar, desconectar: desconectar };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.DRIVE = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -693,7 +693,7 @@
   }
   function driveConectar() {
     var d = dr(); if (driveOcupado) return; driveOcupado = true; driveMsg('Abrindo o login do Google…', 'info');
-    DRIVE.conectar(d.clientId).then(function () { return DRIVE.info(); }).then(function (info) {
+    DRIVE.conectar(d.clientId || DRIVE.ID_PADRAO).then(function () { return DRIVE.info(); }).then(function (info) {
       driveOcupado = false;
       driveMsg('Conectado ao Google Drive. ' + (info ? 'Backup no Drive: ' + fmtHora(info.modifiedTime) + '.' : 'Ainda não há backup no Drive.'), 'ok');
     }).catch(driveErro);
@@ -740,22 +740,23 @@
   function driveCard() {
     var d = dr(), on = DRIVE.temToken(), exp = DRIVE.expiraEm(), cor = { ok: 'ok', warn: 'medio', bad: 'alto', info: '' }[driveStatus.tipo] || '';
     return '<div class="card"><h3>☁️ Backup no Google Drive</h3>' +
-      '<p class="muted">Guarda uma cópia dos seus dados na pasta <b>oculta do app</b> no seu Drive: o app só enxerga o próprio arquivo, nunca o resto. Nada passa por servidor nosso. Precisa de internet e de um ID de cliente Google (configuração única, grátis).</p>' +
-      '<div class="form"><div style="grid-column: 1 / -1"><label for="driveId">ID do cliente Google</label><input id="driveId" data-act="drive-cfg" data-k="clientId" value="' + esc(d.clientId) + '" placeholder="123456-abc.apps.googleusercontent.com" autocomplete="off"></div></div>' +
+      '<p class="muted">Guarda uma cópia dos seus dados na <b>sua conta Google</b>, numa pasta <b>oculta do app</b>: o app só enxerga o próprio arquivo, nunca o resto do seu Drive, e nada passa por servidor nosso. É só entrar com a sua conta Google; precisa de internet.</p>' +
       '<div class="flex" style="margin:10px 0">' + (on
         ? '<button class="btn" type="button" data-act="drive-backup">⬆️ Fazer backup agora</button><button class="btn sec" type="button" data-act="drive-restaurar">⬇️ Restaurar do Drive</button><button class="btn sec" type="button" data-act="drive-desconectar">Desconectar</button>'
-        : '<button class="btn" type="button" data-act="drive-conectar">🔗 Conectar ao Google</button>') + '</div>' +
+        : '<button class="btn" type="button" data-act="drive-conectar">🔗 Entrar com o Google</button>') + '</div>' +
       (driveStatus.txt ? '<div class="sug ' + cor + '"><div>' + esc(driveStatus.txt) + '</div></div>' : '') +
-      '<p class="muted">' + (on ? '✅ Conectado' + (exp ? ' até ' + exp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + ' (depois, conecte de novo)' : '') : '⚪ Não conectado') +
+      '<p class="muted">' + (on ? '✅ Conectado' + (exp ? ' até ' + exp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + ' (depois, entre de novo)' : '') : '⚪ Não conectado') +
       (d.ultimo ? ' · Último backup: ' + fmtHora(d.ultimo) : '') + '</p>' +
       '<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" data-act="drive-cfg" data-k="auto"' + (d.auto ? ' checked' : '') + ' style="width:auto"> Backup automático alguns segundos depois de cada alteração (enquanto estiver conectado)</label>' +
-      '<details class="dica"><summary>Como configurar (uma vez só)</summary><ol style="margin:8px 0 0 18px;padding:0">' +
-      '<li>Acesse <b>console.cloud.google.com</b> e crie um projeto (por exemplo, "estoque-inteligente").</li>' +
-      '<li>Em <b>APIs e serviços → Biblioteca</b>, procure <b>Google Drive API</b> e clique em <b>Ativar</b>.</li>' +
-      '<li>Em <b>Tela de permissão OAuth</b>, escolha <b>Externo</b>, preencha o nome do app e o seu e-mail e, em <b>Usuários de teste</b>, adicione os e-mails que vão usar o backup.</li>' +
-      '<li>Em <b>Credenciais → Criar credenciais → ID do cliente OAuth → Aplicativo da Web</b>. Em <b>Origens JavaScript autorizadas</b>, adicione exatamente: <b>' + esc(location.origin) + '</b></li>' +
-      '<li>Copie o <b>ID do cliente</b> (termina em .apps.googleusercontent.com), cole no campo acima e clique em <b>Conectar</b>.</li></ol>' +
-      '<p class="muted">Se aparecer um aviso de "app não verificado", é o seu próprio app: continue em Avançado. Para ter os mesmos dados em outro aparelho, use o mesmo ID de cliente e a mesma conta Google, e clique em <b>Restaurar do Drive</b>.</p></details></div>';
+      '<p class="muted">Para ter os mesmos dados em outro aparelho: entre com a mesma conta Google lá e toque em <b>Restaurar do Drive</b>. Se o Google mostrar um aviso de "app não verificado", toque em <b>Avançado</b> e continue.</p>' +
+      '<details class="dica"><summary>Avançado: usar o meu próprio ID de cliente Google</summary>' +
+      '<p class="muted">Só para quem hospeda o próprio site em outro endereço. Deixe em branco para usar o padrão do app.</p>' +
+      '<div class="form"><div style="grid-column: 1 / -1"><label for="driveId">ID do cliente Google (opcional)</label><input id="driveId" data-act="drive-cfg" data-k="clientId" value="' + esc(d.clientId) + '" placeholder="123456-abc.apps.googleusercontent.com" autocomplete="off"></div></div>' +
+      '<ol style="margin:8px 0 0 18px;padding:0">' +
+      '<li>Em <b>console.cloud.google.com</b>, crie um projeto e ative a <b>Google Drive API</b> (APIs e serviços → Biblioteca).</li>' +
+      '<li>Configure a <b>Tela de permissão OAuth</b> como <b>Externo</b>, com o escopo <b>drive.appdata</b>, e publique o app (ou adicione usuários de teste).</li>' +
+      '<li>Crie um <b>ID do cliente OAuth</b> do tipo <b>Aplicativo da Web</b> e, em <b>Origens JavaScript autorizadas</b>, adicione <b>' + esc(location.origin) + '</b>.</li>' +
+      '<li>Cole o ID acima e toque em <b>Entrar com o Google</b>.</li></ol></details></div>';
   }
 
   /* ---------------- CONFIG ---------------- */
