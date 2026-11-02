@@ -19,6 +19,9 @@ Valores são médias de referência (TACO/USDA) e não substituem orientação d
 - `js/data.js`: alimentos cadastrados à mão (arroz, feijão, quinoa, massas sem glúten etc.), com rendimento, porção diária e dicas.
 - `js/taco.js`: 591 alimentos da Tabela Brasileira de Composição de Alimentos (TACO/UNICAMP), gerados por `tools/importar_taco.py`
   a partir de [marcelosanto/tabela_taco](https://github.com/marcelosanto/tabela_taco) (MIT). Valores conferidos por amostragem contra a tabela online.
+- `js/usda.js`: 157 alimentos duráveis da USDA FoodData Central (SR Legacy, domínio público), traduzidos para o português e gerados por `tools/importar_usda.py` a partir da seleção em `tools/usda_selecao.json` (grãos, massas, farinhas, leguminosas, oleaginosas, óleos, açúcares, laticínios em pó, conservas). Incluem itens que a TACO não tem, como quinoa, teff, espelta, kamut e amaranto.
 - Cada valor mostra a fonte no catálogo: TACO, USDA, Rótulo (embalagem) ou estimado.
+
+Para atualizar a base USDA: baixe o zip SR Legacy (link no cabeçalho de `tools/importar_usda.py`) e rode `python3 -I tools/importar_usda.py PASTA_CSV js/usda.js`.
 
 Para atualizar a base TACO: `python3 -I tools/importar_taco.py caminho/TACO.json js/taco.js`.

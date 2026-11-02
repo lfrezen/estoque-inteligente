@@ -512,7 +512,7 @@
       var hay = norm(f.nome + ' ' + (f.alias || '') + ' ' + D.GRUPOS[f.grupo]);
       return toks.every(function (t) { return hay.indexOf(t) >= 0; });
     });
-    foods.sort(function (a, b) { return (a.taco ? 1 : 0) - (b.taco ? 1 : 0) || order.indexOf(a.grupo) - order.indexOf(b.grupo); });
+    foods.sort(function (a, b) { return ((a.taco || a.usda) ? 1 : 0) - ((b.taco || b.usda) ? 1 : 0) || order.indexOf(a.grupo) - order.indexOf(b.grupo); });
     return foods;
   }
   function catRows() {
@@ -802,11 +802,11 @@
       res.sort(function (a, b) {
         var sa = norm(a.nome).indexOf(t0) === 0 ? 0 : norm(a.nome).indexOf(t0) > 0 ? 1 : 2;
         var sb = norm(b.nome).indexOf(t0) === 0 ? 0 : norm(b.nome).indexOf(t0) > 0 ? 1 : 2;
-        return sa - sb || (a.taco ? 1 : 0) - (b.taco ? 1 : 0) || a.nome.localeCompare(b.nome, 'pt-BR');
+        return sa - sb || ((a.taco || a.usda) ? 1 : 0) - ((b.taco || b.usda) ? 1 : 0) || a.nome.localeCompare(b.nome, 'pt-BR');
       });
     } else {
       var order = Object.keys(D.GRUPOS);
-      res.sort(function (a, b) { return (a.taco ? 1 : 0) - (b.taco ? 1 : 0) || order.indexOf(a.grupo) - order.indexOf(b.grupo) || a.nome.localeCompare(b.nome, 'pt-BR'); });
+      res.sort(function (a, b) { return ((a.taco || a.usda) ? 1 : 0) - ((b.taco || b.usda) ? 1 : 0) || order.indexOf(a.grupo) - order.indexOf(b.grupo) || a.nome.localeCompare(b.nome, 'pt-BR'); });
     }
     return res;
   }
