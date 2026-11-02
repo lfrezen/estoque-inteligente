@@ -1,8 +1,8 @@
 /* Service worker: cache-first do app inteiro, para funcionar offline.
    Aumente VERSION a cada publicação que altere arquivos. */
-const VERSION = 'v10';
+const VERSION = 'v13';
 const CACHE = 'estoque-inteligente-' + VERSION;
-const ARQUIVOS = ['./', 'index.html', 'css/style.css', 'js/data.js', 'js/taco.js', 'js/meds.js', 'js/prontidao.js', 'js/engine.js', 'js/app.js',
+const ARQUIVOS = ['./', 'index.html', 'css/style.css', 'js/data.js', 'js/taco.js', 'js/usda.js', 'js/meds.js', 'js/prontidao.js', 'js/engine.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'];
 
 self.addEventListener('install', e => {

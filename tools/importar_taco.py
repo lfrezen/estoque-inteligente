@@ -6,7 +6,7 @@ Uso:  python3 -I tools/importar_taco.py caminho/para/TACO.json js/taco.js
 
 - 'Tr' (traços) vira 0; 'NA' e vazio viram "sem dado" (0 nos macros, mas o item só entra se tiver energia).
 - O rendimento cru -> cozido só é calculado quando a própria tabela traz as duas versões do mesmo alimento
-  e a razão de energia fica entre 1,3 e 3,5 (cereais, leguminosas e vegetais).
+  e a razão de energia fica entre 1,3 e 3,5 (cereais, leguminosas e vegetais). Leguminosas cruas sem par usam 2,3.
 """
 import json, re, sys
 
@@ -52,6 +52,10 @@ def main(src, dst):
         if c and z and z['kcal'] > 0 and c['grupo'] in ('cereal', 'leguminosa', 'vegetal'):
             r = c['kcal'] / z['kcal']
             if 1.3 < r <= 3.5: c['rend'] = round(r, 1); n_rend += 1
+    # leguminosas cruas sem versão cozida comparável na tabela: rendimento padrão de 2,3 (feijão cozido e escorrido)
+    for it in itens:
+        if it['grupo'] == 'leguminosa' and it['rend'] == 1.0 and re.search(r',\s*cru[as]?$', it['nome'], re.I) and not re.search(r'(farinha|broto|germinad|amendoim)', it['nome'], re.I):
+            it['rend'] = 2.3; n_rend += 1
     linhas = ',\n'.join('    ' + json.dumps([i['id'], i['nome'], i['grupo'], i['kcal'], i['prot'], i['gord'], i['carb'], i['rend'], i['val']], ensure_ascii=False) for i in itens)
     js = '''/* Gerado por tools/importar_taco.py a partir da Tabela Brasileira de Composição de Alimentos (TACO/UNICAMP),
    via https://github.com/marcelosanto/tabela_taco (MIT). Não edite à mão.

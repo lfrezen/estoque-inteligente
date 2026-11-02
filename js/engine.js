@@ -256,50 +256,147 @@
     { t: 'Atenção a quem é vulnerável', d: 'Crianças, gestantes, lactantes, idosos e doentes crônicos não devem ser racionados como adultos saudáveis. Guarde medicamentos essenciais.' }
   ];
 
-  /* Cardápio diário usando o que existe em estoque */
-  function cardapio(state, an, dias) {
-    var have = {};
-    an.items.forEach(function (i) { have[i.food.id] = i; });
-    var fm = an.fm, h = an.h;
-    function pick(ids, k) {
-      var av = ids.filter(function (id) { return have[id]; });
-      return av.length ? av[k % av.length] : null;
+  /* ---------- Cardápio: usa qualquer alimento do estoque ----------
+     Cada alimento recebe um papel na refeição (base, leguminosa, proteína, legume, fruta, gordura...).
+     As quantidades saem das calorias da casa (já no modo escolhido), respeitando limites por papel e o estoque. */
+  var RX_TEMPERO = /(^|\W)(alho|cebola|cebolinha|salsa|coentro|pimenta|tempero|sal|vinagre|caldo)(\W|$)/i;
+  var RX_ESPESSANTE = /(amido|maisena|maizena|polvilho|fermento|gelatina)/i;
+  var RX_BASE = /(arroz|macarr|massa|quinoa|bulgur|trigo para|lasanha|nhoque|polenta)/i;
+  var RX_TUBERCULO = /(batata|mandioca|aipim|macaxeira|inhame|cará|purê|pure)/i;
+  var RX_FRUTA_SECA = /(passa|t[aâ]mara|damasco|ameixa|frutas secas|banana)/i;
+  var RX_OLEO = /(óleo|oleo|azeite|ghee|manteiga|margarina|banha)/i;
+
+  function papel(f) {
+    if (!(f.kcal > 0) && !(f.fixed && f.porcao > 0)) return null;
+    var nome = f.nome || '';
+    if (f.grupo === 'micro') return f.fixed && f.porcao > 0 ? 'suplemento' : null;
+    if (RX_TEMPERO.test(nome) || RX_ESPESSANTE.test(nome)) return null;
+    switch (f.grupo) {
+      case 'leguminosa': return 'leguminosa';
+      case 'proteina': case 'carne': case 'pescado': return 'proteina';
+      case 'laticinio': return /condensad/i.test(nome) ? 'doce' : 'laticinio';
+      case 'acucar': return 'doce';
+      case 'gordura': return RX_OLEO.test(nome) || f.un === 'l' ? 'oleo' : 'oleaginosa';
+      case 'fruta': return 'fruta';
+      case 'vegetal': return RX_TUBERCULO.test(nome) ? 'base' : RX_FRUTA_SECA.test(nome) ? 'fruta' : 'vegetal';
+      case 'cereal': return /pipoca/i.test(nome) ? 'oleaginosa' : RX_BASE.test(nome) ? 'base' : 'cafe';
+      default: return null;
     }
-    function qty(id, extra) {
-      var f = fm[id]; var g = f.fixed ? f.porcao * h.n : f.porcao * h.f;
-      return Math.round(g * (extra || 1));
+  }
+
+  var REFEICOES = [
+    { nome: 'Café', frac: 0.25, slots: [['cafe', 45], ['laticinio', 30], ['doce', 10], ['fruta', 15]], alt: { cafe: ['base'] } },
+    { nome: 'Almoço', frac: 0.35, slots: [['base', 45], ['leguminosa', 22], ['proteina', 18], ['vegetal', 5], ['oleo', 10]], alt: { base: ['cafe'] } },
+    { nome: 'Jantar', frac: 0.25, slots: [['base', 45], ['proteina', 25], ['leguminosa', 15], ['vegetal', 5], ['oleo', 10]], alt: { base: ['cafe'], proteina: ['leguminosa'] } },
+    { nome: 'Lanche', frac: 0.15, slots: [['oleaginosa', 50], ['fruta', 50]], alt: { oleaginosa: ['doce', 'cafe'], fruta: ['doce', 'oleaginosa'] } }
+  ];
+  // limite em gramas prontas por refeição para uma pessoa de referência (2.000 kcal)
+  var CAP = { cafe: 150, base: 450, leguminosa: 220, proteina: 130, vegetal: 150, fruta: 160, laticinio: 250, doce: 25, oleo: 25, oleaginosa: 50 };
+
+  function kcalPronto(f, g) { return g * f.kcal / (f.rend || 1) / 100; }
+
+  function cardapio(state, an, dias, hoje) {
+    hoje = hoje || new Date();
+    var h = an.h, out = [];
+    out.esgota = [];
+    if (!h.n || !h.kcal || !an.items.length) return out;
+
+    var rest = {}, cand = {}, esgotado = {}, emUso = {};
+    // validade mais próxima de cada alimento
+    var venc = {};
+    (state.estoque || []).forEach(function (s) {
+      if (!s.validade) return;
+      var d = Math.floor((new Date(s.validade + 'T00:00:00') - hoje) / 86400000);
+      if (venc[s.foodId] === undefined || d < venc[s.foodId]) venc[s.foodId] = d;
+    });
+    an.items.forEach(function (it) {
+      var f = it.food, r = papel(f); if (!r || it.kg <= 0) return;
+      rest[f.id] = it.kg;
+      var urg = (venc[f.id] !== undefined && venc[f.id] <= 45) || f.val <= 2;
+      var chave = urg ? (venc[f.id] !== undefined ? venc[f.id] : f.val * 30) : 100000;
+      (cand[r] = cand[r] || []).push({ f: f, chave: chave });
+    });
+    Object.keys(cand).forEach(function (r) {
+      cand[r].sort(function (a, b) { return a.chave - b.chave || a.f.id.localeCompare(b.f.id); });
+      cand[r] = cand[r].map(function (x) { return x.f; });
+    });
+
+    function disponivel(role, exclui) {
+      return (cand[role] || []).filter(function (f) { return rest[f.id] > 0.0005 && f.id !== exclui && !emUso[f.id]; });
     }
-    var out = [];
+    function escolher(role, d, off, exclui, alt) {
+      var l = disponivel(role, exclui);
+      if (!l.length && exclui) l = disponivel(role, null);
+      if (l.length) return { f: l[(d + off) % l.length], role: role };
+      var tent = (alt && alt[role]) || [];
+      for (var i = 0; i < tent.length; i++) { var l2 = disponivel(tent[i], exclui); if (l2.length) return { f: l2[(d + off) % l2.length], role: role, de: tent[i] }; }
+      return null;
+    }
+    function prontoMax(f) { return rest[f.id] * 1000 * (f.rend || 1); }
+    function consumir(f, g, dia) {
+      rest[f.id] -= g / (f.rend || 1) / 1000;
+      if (rest[f.id] <= 0.0005 && !esgotado[f.id]) { esgotado[f.id] = true; out.esgota.push({ food: f, dia: dia }); }
+    }
+
     for (var d = 0; d < dias; d++) {
-      var refeicoes = [];
-      var cafe = [], almoco = [], jantar = [], lanche = [];
-      var cereal = pick(['aveia', 'fuba', 'farinha_trigo', 'farinha_mandioca', 'biscoito'], d);
-      if (cereal) cafe.push(cereal);
-      if (have.leite_po) cafe.push('leite_po');
-      if (have.acucar) cafe.push('acucar');
-      var leg = pick(['feijao', 'lentilha', 'grao_bico'], d);
-      var prot = pick(['atum', 'sardinha', 'soja_texturizada', 'ovo'], d);
-      if (have.arroz) almoco.push('arroz');
-      if (leg) almoco.push(leg);
-      if (prot) almoco.push(prot);
-      if (have.milho_lata && d % 2 === 0) almoco.push('milho_lata');
-      var base2 = pick(['macarrao', 'fuba', 'batata', 'arroz'], d + 1);
-      var prot2 = pick(['sardinha', 'atum', 'soja_texturizada', 'ovo'], d + 1);
-      if (base2) jantar.push(base2);
-      if (have.molho_tomate) jantar.push('molho_tomate');
-      if (prot2 && prot2 !== prot) jantar.push(prot2);
-      var gord = pick(['amendoim', 'pasta_amendoim', 'uva_passa'], d);
-      if (gord) lanche.push(gord);
-      if (have.uva_passa && gord !== 'uva_passa') lanche.push('uva_passa');
-      var oleo = have.oleo ? ['oleo'] : [];
-      var toLine = function (ids) { return ids.map(function (id) { return { food: fm[id], g: qty(id, 1) }; }); };
-      refeicoes.push({ nome: 'Café', itens: toLine(cafe) });
-      refeicoes.push({ nome: 'Almoço', itens: toLine(almoco.concat(oleo)) });
-      refeicoes.push({ nome: 'Jantar', itens: toLine(jantar) });
-      refeicoes.push({ nome: 'Lanche', itens: toLine(lanche) });
-      out.push({ dia: d + 1, refeicoes: refeicoes });
+      var dia = { dia: d + 1, refeicoes: [], kcal: 0 }, carry = 0;
+      var hojeEsc = {};
+      REFEICOES.forEach(function (rf, ri) {
+        var esc = [], kcalRef = h.kcal * rf.frac + carry; emUso = {};
+        rf.slots.forEach(function (sl, si) {
+          var role = sl[0];
+          var exclui = (rf.nome === 'Jantar' && (role === 'base' || role === 'proteina')) ? (hojeEsc['Almoço' + role] || null) : null;
+          var e = escolher(role, d, (role === 'base' || role === 'proteina') ? ri : si, exclui, rf.alt);
+          if (e) { e.peso = sl[1]; esc.push(e); emUso[e.f.id] = true; hojeEsc[rf.nome + role] = e.f.id; }
+        });
+        var itens = [];
+        if (esc.length) {
+          var totalPeso = esc.reduce(function (a, e) { return a + e.peso; }, 0), sobra = 0, gs = [];
+          esc.forEach(function (e) {
+            var kc = kcalRef * e.peso / totalPeso, f = e.f;
+            var gDes = kc * 100 * (f.rend || 1) / f.kcal;
+            var cap = CAP[e.role] * h.f;
+            var g = Math.min(gDes, cap, prontoMax(f));
+            sobra += kcalPronto(f, gDes - g);
+            gs.push({ e: e, g: g, cap: cap });
+          });
+          // o que sobrou vai para o item principal da refeição (primeiro da lista), até seu limite
+          var prin = gs[0];
+          if (prin && sobra > 0) {
+            var f0 = prin.e.f, extra = sobra * 100 * (f0.rend || 1) / f0.kcal;
+            var capExtra = Math.max(0, ((rf.nome === 'Almoço' || rf.nome === 'Jantar') ? CAP.base * h.f : prin.cap) - prin.g);
+            prin.g += Math.min(extra, capExtra, Math.max(0, prontoMax(f0) - prin.g));
+          }
+          gs.forEach(function (x) {
+            var g = x.g >= 20 ? Math.round(x.g / 5) * 5 : Math.round(x.g);
+            if (g < 5) return;
+            consumir(x.e.f, g, d + 1);
+            var kc = kcalPronto(x.e.f, g); dia.kcal += kc;
+            itens.push({ food: x.e.f, g: g, kcal: kc });
+          });
+        }
+        if (rf.nome === 'Café') {
+          Object.keys(rest).forEach(function (id) {
+            var f = an.fm[id]; if (!f || papel(f) !== 'suplemento' || rest[id] <= 0.0005) return;
+            var g = Math.min(f.porcao * h.n, prontoMax(f)); if (g < 1) return;
+            consumir(f, g, d + 1); itens.push({ food: f, g: Math.round(g), kcal: 0 });
+          });
+        }
+        var kcalMeal = itens.reduce(function (a, i) { return a + i.kcal; }, 0);
+        carry = Math.max(0, kcalRef - kcalMeal);
+        dia.refeicoes.push({ nome: rf.nome, itens: itens });
+      });
+      dia.cobertura = dia.kcal / h.kcal * 100;
+      out.push(dia);
     }
     return out;
+  }
+
+  /* texto da quantidade de um alimento pronto: g, ml ou comprimidos */
+  function qtyTexto(f, g) {
+    if (f.grupo === 'micro' && f.fixed) return Math.round(g) + ' comp.';
+    if (f.grupo === 'laticinio' && /leite/i.test(f.nome) && !/condensad/i.test(f.nome)) return Math.round(g) + ' ml';
+    return Math.round(g) + ' g';
   }
 
   function fmtDias(d) {
@@ -311,6 +408,6 @@
 
   var api = { allFoods: allFoods, foodMap: foodMap, toKg: toKg, lineKg: lineKg, fromKg: fromKg, household: household,
               analyze: analyze, despensa: despensa, sugestoes: sugestoes, ESTRATEGIAS: ESTRATEGIAS,
-              cardapio: cardapio, fmtDias: fmtDias, personKcal: personKcal };
+              cardapio: cardapio, qtyTexto: qtyTexto, papel: papel, fmtDias: fmtDias, personKcal: personKcal };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(typeof window !== 'undefined' ? window : this);
