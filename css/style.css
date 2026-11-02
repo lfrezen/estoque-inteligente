@@ -255,3 +255,9 @@ details.area summary::-webkit-details-marker { display: none; }
 .notif { margin: 0 0 10px; flex-wrap: wrap; }
 .notif > div:nth-child(2) { flex: 1 1 240px; min-width: 0; }
 @media (max-width: 560px) { .top-in { flex-wrap: wrap; } .bell { order: 2; } .seg { order: 3; } .notif > .flex { flex: 0 0 100%; padding-left: 34px; } }
+
+/* Ajuda */
+.ajuda { margin-top: 10px; line-height: 1.55; }
+.ajuda p { margin: 8px 0; }
+.ajuda ul, .ajuda ol { margin: 8px 0; padding-left: 22px; }
+.ajuda li { margin: 6px 0; }

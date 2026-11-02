@@ -41,7 +41,7 @@
 
   var TABS = [
     ['painel', '📊 Painel'], ['pessoas', '👨‍👩‍👧 Pessoas'], ['estoque', '📦 Estoque'], ['meds', '💊 Medicamentos'], ['pront', '🧟 Prontidão'], ['compras', '🛒 Compras'], ['financas', '💰 Finanças'],
-    ['cardapio', '🍽️ Cardápio'], ['estrategias', '💡 Estratégias'], ['catalogo', '📖 Catálogo'], ['relatorio', '🖨️ Relatório'], ['config', '⚙️ Config e backup']
+    ['cardapio', '🍽️ Cardápio'], ['estrategias', '💡 Estratégias'], ['catalogo', '📖 Catálogo'], ['relatorio', '🖨️ Relatório'], ['config', '⚙️ Config e backup'], ['ajuda', '❓ Ajuda']
   ];
 
   function renderChrome() {
@@ -58,7 +58,7 @@
     renderChrome(); atualizaSino();
     var v = document.getElementById('view');
     var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, meds: vMeds, pront: vPront, compras: vCompras, financas: vFinancas, cardapio: vCardapio, relatorio: vRelatorio,
-      estrategias: vEstrategias, catalogo: vCatalogo, config: vConfig, notificacoes: vNotificacoes }[tab];
+      estrategias: vEstrategias, catalogo: vCatalogo, config: vConfig, notificacoes: vNotificacoes, ajuda: vAjuda }[tab];
     v.innerHTML = fn();
   }
 
@@ -68,7 +68,8 @@
     var modoDesc = D.MODOS[state.modo].desc;
     var h = '<h2>Visão geral</h2>';
     if (!an.h.n) {
-      return h + '<div class="card">Comece em <b>Pessoas</b> para informar quantas pessoas moram na casa. Depois cadastre o <b>Estoque</b>.</div>';
+      return h + '<div class="card">Comece em <b>Pessoas</b> para informar quantas pessoas moram na casa. Depois cadastre o <b>Estoque</b>.' +
+        '<p class="muted" style="margin:10px 0 0">Primeira vez aqui? <button class="btn sec" type="button" data-tab="ajuda">❓ Veja como funciona</button></p></div>';
     }
     var pct = isFinite(d.energia) ? Math.min(100, d.energia / meta * 100) : 100;
     var c = cls(d.energia, meta), R = 70, C = 2 * Math.PI * R;
@@ -934,7 +935,7 @@
       '<p class="muted">' + (on ? '✅ Conectado' + (exp ? ' até ' + exp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + ' (depois, entre de novo)' : '') : '⚪ Não conectado') +
       (d.ultimo ? ' · Último backup: ' + fmtHora(d.ultimo) : '') + '</p>' +
       '<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" data-act="drive-cfg" data-k="auto"' + (d.auto ? ' checked' : '') + ' style="width:auto"> Backup automático alguns segundos depois de cada alteração (enquanto estiver conectado)</label>' +
-      '<p class="muted">Para ter os mesmos dados em outro aparelho: entre com a mesma conta Google lá e toque em <b>Restaurar do Drive</b>. Se o Google mostrar um aviso de "app não verificado", toque em <b>Avançado</b> e continue.</p>' +
+      '<p class="muted">Para ter os mesmos dados em outro aparelho: entre com a mesma conta Google lá e toque em <b>Restaurar do Drive</b>. Se o Google mostrar um aviso de "app não verificado", toque em <b>Avançado</b> e continue. <button class="btn sec" type="button" data-tab="ajuda">❓ Como funciona o backup</button></p>' +
       '<details class="dica"><summary>Avançado: usar o meu próprio ID de cliente Google</summary>' +
       '<p class="muted">Só para quem hospeda o próprio site em outro endereço. Deixe em branco para usar o padrão do app.</p>' +
       '<div class="form"><div style="grid-column: 1 / -1"><label for="driveId">ID do cliente Google (opcional)</label><input id="driveId" data-act="drive-cfg" data-k="clientId" value="' + esc(d.clientId) + '" placeholder="123456-abc.apps.googleusercontent.com" autocomplete="off"></div></div>' +
@@ -943,6 +944,37 @@
       '<li>Configure a <b>Tela de permissão OAuth</b> como <b>Externo</b>, com o escopo <b>drive.appdata</b>, e publique o app (ou adicione usuários de teste).</li>' +
       '<li>Crie um <b>ID do cliente OAuth</b> do tipo <b>Aplicativo da Web</b> e, em <b>Origens JavaScript autorizadas</b>, adicione <b>' + esc(location.origin) + '</b>.</li>' +
       '<li>Cole o ID acima e toque em <b>Entrar com o Google</b>.</li></ol></details></div>';
+  }
+
+  /* ---------------- AJUDA ---------------- */
+  function vAjuda() {
+    var sec = function (aberto, titulo, corpo) { return '<details class="card area"' + (aberto ? ' open' : '') + '><summary><span><b>' + titulo + '</b></span></summary><div class="ajuda">' + corpo + '</div></details>'; };
+    return '<h2>❓ Ajuda: como funciona</h2>' +
+      '<p class="muted">O Estoque Inteligente calcula quantos dias a sua despensa dura para as pessoas da casa. Aqui está o essencial sobre onde ficam os seus dados e como não perdê-los.</p>' +
+      sec(true, '🗄️ Onde ficam os seus dados', '<p>Tudo o que você digita fica <b>só neste navegador, neste aparelho</b>. Não existe servidor nem conta: nós não temos acesso aos seus dados.</p>' +
+        '<ul><li><b>Cada navegador guarda o seu próprio conjunto.</b> O Chrome e o navegador que abre dentro de outro app (WhatsApp, Claude etc.) <b>não compartilham</b> dados, mesmo no mesmo celular.</li>' +
+        '<li><b>Limpar os dados do site</b> ou usar uma aba anônima apaga tudo. Trocar de aparelho começa do zero.</li>' +
+        '<li>Por isso vale ter um <b>backup</b>: se algo der errado, você recupera.</li></ul>') +
+      sec(true, '💾 Como fazer backup', '<p>Há três jeitos, e eles se complementam:</p><ol>' +
+        '<li><b>Google Drive</b> (recomendado): em <b>Config e backup</b>, toque em <i>Entrar com o Google</i> e depois em <i>Fazer backup agora</i>. O arquivo vai para uma pasta <b>oculta do app</b> no seu Drive: o app só enxerga o próprio arquivo, nunca o resto do Drive.</li>' +
+        '<li><b>Arquivo no aparelho</b>: <i>Exportar JSON</i> baixa um arquivo com tudo. Guarde-o onde quiser e use <i>Importar JSON</i> para voltar.</li>' +
+        '<li><b>Papel</b>: a aba <b>Relatório</b> imprime (ou salva em PDF) um resumo para fixar na geladeira.</li></ol>' +
+        '<p><b>Backup automático:</b> na mesma tela, marque a caixa "Backup automático". Com ela ligada e conectado, o app salva sozinho alguns segundos depois de cada alteração. Desligada, o backup é só quando você toca no botão.</p>' +
+        '<p><b>Por quanto tempo fica conectado:</b> o Google libera o acesso por cerca de <b>1 hora</b>. Atualizar a página não desconecta, mas fechar a aba sim, e depois de 1 hora é preciso <i>Entrar com o Google</i> de novo. O sino 🔔 avisa quando isso acontece com o backup automático ligado.</p>') +
+      sec(false, '📲 Usar em outro aparelho ou navegador', '<ol><li>No aparelho antigo, faça o backup no Drive (ou exporte o arquivo).</li>' +
+        '<li>No novo, abra este mesmo endereço e entre <b>com a mesma conta Google</b>, depois toque em <i>Restaurar do Drive</i>. Ou use <i>Importar JSON</i> com o arquivo.</li></ol>' +
+        '<p><b>Atenção:</b> restaurar <b>substitui</b> os dados do aparelho pelos do backup. O app pede confirmação antes. Se o Drive tiver um backup mais novo que o do aparelho, ele também avisa antes de sobrescrever.</p>') +
+      sec(false, '🚀 Primeiros passos', '<ol><li><b>Pessoas</b>: cadastre quem mora na casa (idade e perfil definem as calorias e a água).</li>' +
+        '<li><b>Estoque</b>: busque o alimento, informe a quantidade, e, se quiser, validade, preço e loja.</li>' +
+        '<li><b>Config e backup</b>: informe a água guardada (ex.: caixa de 500 L = 500) e o gás.</li>' +
+        '<li><b>Painel</b> e <b>Compras</b>: veja quantos dias duram e o que falta para a meta.</li>' +
+        '<li><b>Medicamentos</b> e <b>Prontidão</b>: complete com remédios, mochila de fuga e o plano da família.</li>' +
+        '<li>Faça o <b>primeiro backup</b>. O sino 🔔 lembra de vencimentos e de backup antigo.</li></ol>') +
+      sec(false, '🙋 Perguntas rápidas', '<p><b>O Google mostrou "app não verificado".</b> É esperado: toque em <i>Avançado</i> e continue. O app só pede acesso à pasta oculta dele.</p>' +
+        '<p><b>Perdi a conexão com o Google.</b> O acesso dura cerca de 1 hora. Toque em <i>Entrar com o Google</i>; seus dados continuam salvos no aparelho.</p>' +
+        '<p><b>Como apago tudo?</b> Em Config e backup, <i>Apagar tudo</i> remove os dados do aparelho. O backup no Drive é apagado pelo Google Drive (Configurações → Gerenciar aplicativos → Estoque Inteligente → Excluir dados ocultos). Detalhes na <a href="privacidade.html">Política de Privacidade</a>.</p>' +
+        '<p><b>Funciona sem internet?</b> Sim, depois da primeira abertura. A internet só é necessária para o backup no Drive.</p>' +
+        '<p><b>As estimativas são exatas?</b> São aproximadas, baseadas em tabelas públicas (TACO/USDA). Não substituem nutricionista ou médico.</p>');
   }
 
   /* ---------------- CONFIG ---------------- */
