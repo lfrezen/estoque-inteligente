@@ -187,3 +187,9 @@ tbody tr[hidden] { display: none; }
   .rel-t th, .rel-t td, .cal, .rk, .box, .rel-t tr.grp td, .cal.sem { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 @media (max-width: 560px) { .cal-grid { grid-template-columns: repeat(5, 1fr); } }
+
+/* Medicamentos */
+.tag.bad { background: var(--bad-soft); color: var(--bad); } .tag.warn { background: var(--warn-soft); color: var(--warn); }
+b.bad { color: var(--bad); } b.warn { color: var(--warn); } b.ok { color: var(--ok); }
+details.dica { border-top: 1px solid var(--line); padding: 8px 0; } details.dica:first-of-type { border-top: 0; }
+details.dica summary { cursor: pointer; font-weight: 600; } details.dica p { margin: 6px 0 2px; color: var(--ink); }

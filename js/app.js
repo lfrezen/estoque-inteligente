@@ -1,10 +1,10 @@
 (function () {
   'use strict';
-  var D = window.DATA, E = window.Engine;
+  var D = window.DATA, E = window.Engine, M = window.MEDS;
   var KEY = 'estoque-inteligente-v1';
 
   var DEFAULT = {
-    versao: 1, modo: 'normal', metaDias: 90, pessoas: [], estoque: [], custom: [], porcoes: {},
+    versao: 1, modo: 'normal', metaDias: 90, pessoas: [], estoque: [], meds: [], custom: [], porcoes: {},
     aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, atualizado: null
   };
   var state = load();
@@ -39,7 +39,7 @@
   function fname(f, sub) { return '<div class="fname"><span class="em" aria-hidden="true">' + em(f) + '</span><div>' + esc(f.nome) + (sub ? '<div class="muted">' + sub + '</div>' : '') + '</div></div>'; }
 
   var TABS = [
-    ['painel', '📊 Painel'], ['pessoas', '👨‍👩‍👧 Pessoas'], ['estoque', '📦 Estoque'], ['compras', '🛒 Compras'],
+    ['painel', '📊 Painel'], ['pessoas', '👨‍👩‍👧 Pessoas'], ['estoque', '📦 Estoque'], ['meds', '💊 Medicamentos'], ['compras', '🛒 Compras'],
     ['cardapio', '🍽️ Cardápio'], ['estrategias', '💡 Estratégias'], ['catalogo', '📖 Catálogo'], ['relatorio', '🖨️ Relatório'], ['config', '⚙️ Config e backup']
   ];
 
@@ -55,7 +55,7 @@
   function render() {
     renderChrome();
     var v = document.getElementById('view');
-    var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, compras: vCompras, cardapio: vCardapio, relatorio: vRelatorio,
+    var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, meds: vMeds, compras: vCompras, cardapio: vCardapio, relatorio: vRelatorio,
       estrategias: vEstrategias, catalogo: vCatalogo, config: vConfig }[tab];
     v.innerHTML = fn();
   }
@@ -122,6 +122,12 @@
           return '<tr><td>' + fname(f) + '</td><td class="num">' + n1(i.kg) + ' kg</td><td class="num">' + n1(i.cozidoKg) + ' kg</td><td class="num">' + (i.porDiaKg > 0 ? dias(i.dias) : '—') + '</td></tr>';
         }).join('') + '</tbody></table></div><p class="muted">Duração de cada item sozinho, seguindo as porções da aba Catálogo.</p></div>';
     }
+
+    // medicamentos
+    var mr = M.resumo(state.meds || []);
+    h += '<div class="card"><div class="flex between"><h3>💊 Medicamentos</h3><button class="btn sec" type="button" data-tab="meds">Abrir</button></div>' +
+      (mr.total ? '<p>' + mr.total + ' item(ns) · <b' + (mr.vencidos ? ' style="color:var(--bad)"' : '') + '>' + mr.vencidos + ' vencido(s)</b> · ' + mr.atencao + ' vencem em 90 dias · kit essencial ' + mr.essenciaisOk + ' de ' + mr.essenciais + (mr.continuoMin !== null ? ' · uso contínuo dura <b>' + dias(mr.continuoMin) + '</b>' : '') + '.</p>'
+        : '<p class="muted">Cadastre seus medicamentos e veja o kit essencial, a validade e dicas para situação extrema.</p>') + '</div>';
 
     // validade
     if (an.alertas.length) {
@@ -225,6 +231,81 @@
           '<td class="num">' + (it && it.porDiaKg > 0 ? dias(it.dias) : '—') + '</td>' +
           '<td><button class="btn del" data-act="del-estoque" data-id="' + s.id + '">×</button></td></tr>';
       }).join('') + '</tbody></table></div></div>';
+    return h;
+  }
+
+  /* ---------------- MEDICAMENTOS ---------------- */
+  var medPre = '';
+  var NIVEL_TXT = { ok: 'Em caso extremo: risco menor', cuidado: 'Evitar; só com orientação', nao: 'Não usar vencido' };
+  function pessoaNome(id) {
+    var i = -1; state.pessoas.forEach(function (p, k) { if (p.id === id) i = k; });
+    return i < 0 ? 'Todos' : (state.pessoas[i].nome || 'Pessoa ' + (i + 1));
+  }
+  function vMeds() {
+    var hoje = new Date(), meds = state.meds || [], r = M.resumo(meds, hoje), meta = state.metaDias;
+    var pre = M.catPorId(medPre);
+    var h = '<h2>Medicamentos</h2><div class="disclaimer">⚕️ Conteúdo <b>informativo</b>, sem doses. Não substitui a orientação de médico ou farmacêutico. Use sempre a bula e a prescrição de cada pessoa.</div>';
+    h += '<div class="grid" style="margin-top:12px">' +
+      kpi('Itens cadastrados', n0(r.total), 'ok', 'medicamentos e materiais', '💊') +
+      kpi('Vencidos', n0(r.vencidos), r.vencidos ? 'bad' : 'ok', r.vencidos ? 'veja o que fazer abaixo' : 'nenhum vencido', '⛔') +
+      kpi('Vencem em 90 dias', n0(r.atencao), r.atencao ? 'warn' : 'ok', 'planeje a reposição', '⏳') +
+      kpi('Kit essencial', r.essenciaisOk + ' de ' + r.essenciais, r.essenciaisOk >= r.essenciais ? 'ok' : r.essenciaisOk >= r.essenciais / 2 ? 'warn' : 'bad', 'itens essenciais com estoque válido', '🧰') +
+      (r.continuoMin !== null ? kpi('Uso contínuo dura', dias(r.continuoMin), cls(r.continuoMin, meta), 'menor reserva: ' + esc(r.continuoNome), '🔁') : '') + '</div>';
+
+    h += '<div class="card"><h3>➕ Cadastrar medicamento</h3><form class="form" data-form="med">' +
+      '<div><label for="medNome">Nome</label><input id="medNome" name="nome" list="medNomes" maxlength="60" placeholder="ex.: Paracetamol 500 mg" value="' + (pre ? esc(pre.nome.replace(/ \(.*\)/, '')) : '') + '">' +
+      '<datalist id="medNomes">' + M.CATEGORIAS.map(function (c) { return '<option value="' + esc(c.nome) + '">'; }).join('') + '</datalist></div>' +
+      '<div><label for="medCat">Tipo (define a orientação de validade)</label><select id="medCat" name="cat" data-act="med-cat"><option value="">Outro / não listado</option>' +
+      Object.keys(M.GRUPOS).map(function (g) {
+        return '<optgroup label="' + M.GRUPOS[g] + '">' + M.CATEGORIAS.filter(function (c) { return c.grupo === g; }).map(function (c) { return '<option value="' + c.id + '"' + (medPre === c.id ? ' selected' : '') + '>' + esc(c.nome) + '</option>'; }).join('') + '</optgroup>';
+      }).join('') + '</select></div>' +
+      '<div><label for="medForma">Forma</label><select id="medForma" name="forma">' + Object.keys(M.FORMAS).map(function (k) { return '<option value="' + k + '"' + (pre && pre.forma === k ? ' selected' : '') + '>' + M.FORMAS[k] + '</option>'; }).join('') + '</select></div>' +
+      '<div><label for="medQtd">Quantidade</label><input id="medQtd" name="qtd" type="number" min="0" step="any" required></div>' +
+      '<div><label for="medUn">Unidade</label><select id="medUn" name="un">' + Object.keys(M.UNIDADES).map(function (k) { return '<option value="' + k + '">' + M.UNIDADES[k] + '</option>'; }).join('') + '</select></div>' +
+      '<div><label for="medVal">Validade</label><input id="medVal" name="validade" type="date"></div>' +
+      '<div><label for="medPess">Para quem</label><select id="medPess" name="pessoa"><option value="">Todos / uso geral</option>' + state.pessoas.map(function (p, i) { return '<option value="' + p.id + '">' + esc(p.nome || 'Pessoa ' + (i + 1)) + '</option>'; }).join('') + '</select></div>' +
+      '<div><label><input type="checkbox" id="medCont" name="continuo" data-act="med-cont" style="width:auto"> Uso contínuo</label>' +
+      '<input id="medDose" name="dose" type="number" min="0" step="any" placeholder="Dose por dia (unidades)" disabled></div>' +
+      '<div style="grid-column: span 2"><label for="medObs">Observações (dose prescrita, horário…)</label><input id="medObs" name="obs" maxlength="120"></div>' +
+      '<div><button class="btn" type="submit">Adicionar</button></div></form></div>';
+
+    if (!meds.length) h += '<div class="empty"><big>💊</big>Nenhum medicamento cadastrado. Use o kit essencial abaixo como guia do que reunir.</div>';
+    else {
+      h += '<div class="card"><div class="scroll"><table><thead><tr><th>Medicamento</th><th>Para quem</th><th class="num">Qtd.</th><th>Validade</th><th class="num">Dura</th><th></th></tr></thead><tbody>' +
+        meds.map(function (m) {
+          var a = M.avaliar(m, hoje), cat = M.catPorId(m.cat), du = M.duracao(m);
+          var tag = a.situacao === 'vencido' ? '<span class="tag bad">Vencido há ' + Math.abs(a.dias) + ' d</span>' :
+            a.situacao === 'atencao' ? '<span class="tag warn">Vence em ' + a.dias + ' d</span>' :
+            a.situacao === 'ok' ? '<span class="tag">Válido</span>' : '<span class="tag est">sem data</span>';
+          var aviso = a.situacao === 'vencido' ? '<div class="muted" title="' + esc(a.conselho) + '">' + NIVEL_TXT[a.nivel] + '</div>' : '';
+          return '<tr><td><b>' + esc(m.nome) + '</b><div class="muted">' + esc(cat ? cat.nome : 'Outro') + ' · ' + M.FORMAS[m.forma] + (m.obs ? ' · ' + esc(m.obs) : '') + '</div></td>' +
+            '<td>' + esc(pessoaNome(m.pessoa)) + '</td>' +
+            '<td class="num"><input type="number" min="0" step="any" value="' + m.qtd + '" data-act="med-qtd" data-id="' + m.id + '" style="width:80px" aria-label="Quantidade"> <span class="muted">' + M.UNIDADES[m.un] + '</span></td>' +
+            '<td>' + (m.validade ? new Date(m.validade + 'T00:00:00').toLocaleDateString('pt-BR') : '—') + '<div>' + tag + '</div>' + aviso + '</td>' +
+            '<td class="num">' + (du !== null ? '<b class="' + cls(du, meta) + '">' + dias(du) + '</b>' : '—') + '</td>' +
+            '<td><button class="btn del" data-act="del-med" data-id="' + m.id + '">×</button></td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+      if (r.vencidos) h += '<div class="sug alto"><span class="ic" aria-hidden="true">⚠️</span><div><b>' + r.vencidos + ' item(ns) vencido(s)</b>' + esc(M.CONSELHO.nao) + ' Para sólidos secos íntegros, veja "Em caso extremo" nas dicas abaixo.</div></div>';
+    }
+
+    // kit essencial
+    var kit = M.kit(meds, hoje);
+    h += '<div class="card"><h3>🧰 Kit essencial: o que reunir</h3><p class="muted">✅ você tem, válido · ⚠️ só há item vencido · ⬜ falta. Os itens "se você usa" valem só para quem já tem prescrição.</p>';
+    Object.keys(M.GRUPOS).forEach(function (g) {
+      var list = kit.filter(function (k) { return k.cat.grupo === g; });
+      h += '<h3 style="margin-top:12px">' + M.GRUPOS[g] + '</h3><div class="scroll"><table><tbody>' + list.map(function (k) {
+        var c = k.cat, ic = k.tem ? '✅' : k.soVencido ? '⚠️' : '⬜';
+        var prio = c.prio === 'essencial' ? '<span class="tag">essencial</span>' : c.prio === 'condicional' ? '<span class="tag est">se você usa</span>' : '<span class="tag src">recomendado</span>';
+        return '<tr><td style="width:30px">' + ic + '</td><td><b>' + esc(c.nome) + '</b> ' + prio + '<div class="muted">' + esc(c.para) + (c.nota ? ' ' + esc(c.nota) : '') + '</div></td>' +
+          '<td class="num">' + (k.tem ? '' : '<button class="btn sec" type="button" data-act="med-add-cat" data-id="' + c.id + '">Cadastrar</button>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    });
+    h += '</div>';
+
+    // dicas
+    h += '<div class="card"><h3>📌 Validade e armazenamento em situação extrema</h3>' + M.DICAS.map(function (d, i) {
+      return '<details class="dica"' + (i < 2 ? ' open' : '') + '><summary>' + esc(d.t) + '</summary><p>' + esc(d.d) + '</p></details>';
+    }).join('') + '<div class="disclaimer">Em dúvida sobre um medicamento, fale com um farmacêutico ou médico. Emergência: <b>SAMU 192</b> · <b>Bombeiros 193</b>.</div></div>';
     return h;
   }
 
@@ -351,7 +432,7 @@
   }
 
   /* ---------------- RELATÓRIO PARA IMPRIMIR ---------------- */
-  var rel = { caixas: 14, cardapio: true, calendario: true };
+  var rel = { caixas: 14, cardapio: true, calendario: true, meds: true };
   function p2(n) { return ('0' + n).slice(-2); }
   function fmtData(d) { return p2(d.getDate()) + '/' + p2(d.getMonth() + 1); }
   function fmtDataL(d) { return fmtData(d) + '/' + d.getFullYear(); }
@@ -366,6 +447,7 @@
       '<div><label for="relCx">Caixinhas de uso por alimento</label><select id="relCx" data-act="rel-opt" data-k="caixas">' +
       [7, 14, 21, 30].map(function (n) { return '<option value="' + n + '"' + (rel.caixas === n ? ' selected' : '') + '>' + n + ' dias</option>'; }).join('') + '</select></div>' +
       '<div><label><input type="checkbox" data-act="rel-opt" data-k="cardapio"' + (rel.cardapio ? ' checked' : '') + ' style="width:auto"> Incluir cardápio de 7 dias</label>' +
+      '<label><input type="checkbox" data-act="rel-opt" data-k="meds"' + (rel.meds ? ' checked' : '') + ' style="width:auto"> Incluir medicamentos</label>' +
       '<label><input type="checkbox" data-act="rel-opt" data-k="calendario"' + (rel.calendario ? ' checked' : '') + ' style="width:auto"> Incluir calendário de ' + meta + ' dias</label></div>' +
       '<div><button class="btn" type="button" data-act="imprimir">🖨️ Imprimir / salvar PDF</button></div></div></div></div>';
     if (!an.h.n || !an.items.length) return h + '<div class="empty no-print"><big>🖨️</big>Cadastre pessoas e estoque para gerar o relatório.</div>';
@@ -417,6 +499,18 @@
         '<div class="rel-foot">Troque alimentos do mesmo grupo à vontade (feijão por lentilha, atum por sardinha). Gaste primeiro o que tem validade mais curta.</div></section>';
     }
 
+    if (rel.meds && (state.meds || []).length) {
+      var mrows = state.meds.slice().sort(function (a, b) { return String(a.validade || '9999').localeCompare(String(b.validade || '9999')); }).map(function (m) {
+        var a = M.avaliar(m, hoje), du = M.duracao(m), cat = M.catPorId(m.cat);
+        var sit = a.situacao === 'vencido' ? '<b>VENCIDO</b> há ' + Math.abs(a.dias) + ' d<br><small>' + NIVEL_TXT[a.nivel] + '</small>' : a.situacao === 'atencao' ? 'vence em ' + a.dias + ' d' : a.situacao === 'ok' ? 'válido' : '—';
+        return '<tr><td><b>' + esc(m.nome) + '</b><br><small>' + esc(cat ? cat.nome : 'Outro') + (m.obs ? ' · ' + esc(m.obs) : '') + '</small></td><td class="c">' + esc(pessoaNome(m.pessoa)) + '</td>' +
+          '<td class="c">' + n1(m.qtd) + ' ' + M.UNIDADES[m.un] + '</td><td class="c">' + (m.validade ? fmtDataL(new Date(m.validade + 'T00:00:00')) : '—') + '</td><td class="c">' + sit + '</td>' +
+          '<td class="c">' + (du !== null ? '<b>' + dias(du) + '</b>' : '—') + '</td><td class="rest"></td></tr>';
+      }).join('');
+      h += '<section class="rel-sheet"><div class="rel-head"><div><h1>💊 Medicamentos</h1><div class="rs">Gerado em ' + fmtDataL(hoje) + '. Ordenado por validade. Informativo: use sempre a bula e a prescrição. Emergência: SAMU 192 · Bombeiros 193.</div></div></div>' +
+        '<table class="rel-t"><thead><tr><th style="width:26%">Medicamento</th><th style="width:11%">Para quem</th><th style="width:12%">Quantidade</th><th style="width:10%">Validade</th><th style="width:17%">Situação</th><th style="width:10%">Dura (contínuo)</th><th>Restante</th></tr></thead><tbody>' + mrows + '</tbody></table></section>';
+    }
+
     if (rel.calendario) {
       var dE = Math.floor(d.energia), dP = Math.floor(d.proteina), dA = state.aguaL > 0 ? Math.floor(d.agua) : Infinity, dG = state.gasKg > 0 ? Math.floor(d.gas) : Infinity;
       var cells = '';
@@ -460,6 +554,8 @@
     else if (act === 'cat-mais') { cat.n += 80; catRefresh(); }
     else if (act === 'novo-alimento') { prefillNome = t.dataset.nome || ''; tab = 'catalogo'; render(); var f = document.getElementById('novoNome'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); } }
     else if (act === 'imprimir') window.print();
+    else if (act === 'del-med') { state.meds = state.meds.filter(function (m) { return m.id !== id; }); save(); render(); }
+    else if (act === 'med-add-cat') { medPre = id; render(); var mn = document.getElementById('medNome'); if (mn) { mn.scrollIntoView({ block: 'center' }); document.getElementById('medQtd').focus(); } }
     else if (act === 'export') exportar();
     else if (act === 'reset') {
       if (confirm('Apagar TODOS os dados deste navegador? Esta ação não pode ser desfeita.')) {
@@ -471,6 +567,9 @@
   document.addEventListener('change', function (e) {
     var t = e.target;
     var act = t.dataset && t.dataset.act; if (!act) return;
+    if (act === 'med-cat') { var mc = M.catPorId(t.value); if (mc) { document.getElementById('medForma').value = mc.forma; var nn = document.getElementById('medNome'); if (!nn.value) nn.value = mc.nome.replace(/ \(.*\)/, ''); } return; }
+    if (act === 'med-cont') { var dz = document.getElementById('medDose'); dz.disabled = !t.checked; if (!t.checked) dz.value = ''; return; }
+    if (act === 'med-qtd') { var mq = find(state.meds, t.dataset.id); if (mq) { mq.qtd = Math.max(0, Number(t.value) || 0); save(); render(); } return; }
     if (act === 'rel-opt') { var k = t.dataset.k; rel[k] = k === 'caixas' ? Number(t.value) : t.checked; render(); return; }
     if (act === 'pesoUn') { var sp = find(state.estoque, t.dataset.id); if (sp) { sp.pesoUn = Math.max(0, Number(t.value) || 0); save(); render(); } }
     else if (act === 'qtd') { var s = find(state.estoque, t.dataset.id); if (s) { s.qtd = Math.max(0, Number(t.value) || 0); save(); render(); } }
@@ -497,6 +596,12 @@
       focusSearch = true;
       var ff = E.foodMap(E.allFoods(state))[fid], peso = Number(fd.get('pesoUn'));
       state.estoque.push({ id: uid(), foodId: fid, qtd: qtd, pesoUn: ff && ff.un === 'un' && peso > 0 ? peso : 0, validade: fd.get('validade') || '' });
+    } else if (kind === 'med') {
+      var cat = M.catPorId(fd.get('cat')), nm = String(fd.get('nome') || '').trim() || (cat ? cat.nome : '');
+      if (!nm) return;
+      state.meds.push({ id: uid(), nome: nm, cat: fd.get('cat') || '', forma: fd.get('forma'), qtd: Math.max(0, Number(fd.get('qtd')) || 0), un: fd.get('un'),
+        validade: fd.get('validade') || '', pessoa: fd.get('pessoa') || '', continuo: !!fd.get('continuo'), dose: Number(fd.get('dose')) || 0, obs: String(fd.get('obs') || '').trim() });
+      medPre = '';
     } else if (kind === 'custom') {
       var un = fd.get('un'), gpu = Number(fd.get('gpu')) || (un === 'l' ? 1000 : 1);
       state.custom.push({ id: 'c_' + uid(), nome: String(fd.get('nome')).trim(), grupo: fd.get('grupo'), un: un, gpu: gpu,
