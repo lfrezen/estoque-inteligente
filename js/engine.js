@@ -27,6 +27,12 @@
     if (food.un === 'l') return qty * (food.gpu || 1000) / 1000;
     return qty * (food.gpu || 0) / 1000;
   }
+  /* kg de uma linha de estoque: para itens em unidades, usa o peso informado na linha (ex.: lata de 179 g) */
+  function lineKg(food, s) {
+    var q = Number(s.qtd) || 0;
+    if (food.un === 'un' && Number(s.pesoUn) > 0) return q * Number(s.pesoUn) / 1000;
+    return toKg(food, q);
+  }
   /* kg armazenado -> quantidade na unidade de estoque */
   function fromKg(food, kg) {
     if (food.un === 'kg') return kg;
@@ -78,7 +84,7 @@
     var lines = [];
     (state.estoque || []).forEach(function (s) {
       var f = fm[s.foodId]; if (!f) return;
-      var kg = toKg(f, s.qtd);
+      var kg = lineKg(f, s);
       var a = agg[f.id] || (agg[f.id] = { food: f, kg: 0 });
       a.kg += kg;
       lines.push({ s: s, food: f, kg: kg });
@@ -150,10 +156,11 @@
   function despensa(state, mode, targetDays) {
     mode = mode || state.modo || 'normal';
     var foods = allFoods(state), h = household(state, mode);
-    var have = {};
+    var have = {}, unidades = {};
     (state.estoque || []).forEach(function (s) {
       var f = foodMap(foods)[s.foodId]; if (!f) return;
-      have[f.id] = (have[f.id] || 0) + toKg(f, s.qtd);
+      have[f.id] = (have[f.id] || 0) + lineKg(f, s);
+      unidades[f.id] = (unidades[f.id] || 0) + (Number(s.qtd) || 0);
     });
     var rows = [], kcalDia = 0;
     foods.filter(function (f) { return f.core && f.porcao > 0; }).forEach(function (f) {
@@ -172,9 +179,12 @@
     };
     rows.forEach(function (r) {
       r.faltaKg = Math.max(0, r.necessarioKg - r.temKg);
-      r.faltaQtd = fromKg(r.food, r.faltaKg);
-      r.necessarioQtd = fromKg(r.food, r.necessarioKg);
-      r.temQtd = fromKg(r.food, r.temKg);
+      // itens em unidades: referência = peso médio das unidades que você cadastrou (ou o padrão do catálogo)
+      r.refG = r.food.un === 'un' ? (unidades[r.food.id] > 0 ? r.temKg * 1000 / unidades[r.food.id] : r.food.gpu) : null;
+      var conv = function (kg) { return r.refG ? kg * 1000 / r.refG : fromKg(r.food, kg); };
+      r.faltaQtd = conv(r.faltaKg);
+      r.necessarioQtd = conv(r.necessarioKg);
+      r.temQtd = conv(r.temKg);
       r.pct = r.necessarioKg > 0 ? Math.min(100, r.temKg / r.necessarioKg * 100) : 100;
     });
     rows.sort(function (a, b) { return a.pct - b.pct; });
@@ -299,7 +309,7 @@
     return Math.round(d) + ' dias';
   }
 
-  var api = { allFoods: allFoods, foodMap: foodMap, toKg: toKg, fromKg: fromKg, household: household,
+  var api = { allFoods: allFoods, foodMap: foodMap, toKg: toKg, lineKg: lineKg, fromKg: fromKg, household: household,
               analyze: analyze, despensa: despensa, sugestoes: sugestoes, ESTRATEGIAS: ESTRATEGIAS,
               cardapio: cardapio, fmtDias: fmtDias, personKcal: personKcal };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;

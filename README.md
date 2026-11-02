@@ -10,3 +10,11 @@ para a sua família, com sugestões de compras, estratégias de economia e card�
 
 Uso: abra `index.html` ou publique a pasta no GitHub Pages / Cloudflare Pages.
 Valores são médias de referência (TACO/USDA) e não substituem orientação de nutricionista.
+
+## Base de alimentos
+- `js/data.js`: alimentos cadastrados à mão (arroz, feijão, quinoa, massas sem glúten etc.), com rendimento, porção diária e dicas.
+- `js/taco.js`: 591 alimentos da Tabela Brasileira de Composição de Alimentos (TACO/UNICAMP), gerados por `tools/importar_taco.py`
+  a partir de [marcelosanto/tabela_taco](https://github.com/marcelosanto/tabela_taco) (MIT). Valores conferidos por amostragem contra a tabela online.
+- Cada valor mostra a fonte no catálogo: TACO, USDA, Rótulo (embalagem) ou estimado.
+
+Para atualizar a base TACO: `python3 -I tools/importar_taco.py caminho/TACO.json js/taco.js`.
