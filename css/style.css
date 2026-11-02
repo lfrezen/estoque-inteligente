@@ -193,3 +193,16 @@ tbody tr[hidden] { display: none; }
 b.bad { color: var(--bad); } b.warn { color: var(--warn); } b.ok { color: var(--ok); }
 details.dica { border-top: 1px solid var(--line); padding: 8px 0; } details.dica:first-of-type { border-top: 0; }
 details.dica summary { cursor: pointer; font-weight: 600; } details.dica p { margin: 6px 0 2px; color: var(--ink); }
+
+/* Prontidão */
+.pr-hero { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
+.pr-num { width: 104px; height: 104px; border-radius: 50%; display: grid; place-content: center; text-align: center; border: 8px solid var(--brand); flex: 0 0 auto; }
+.pr-num b { font-size: 2.2rem; line-height: 1; } .pr-num span { font-size: .7rem; color: var(--muted); }
+.pr-hero h2 { margin: 0; }
+.chk { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.chk input { width: 20px; height: 20px; margin-top: 2px; flex: 0 0 auto; accent-color: var(--brand); }
+.chk small { color: var(--muted); }
+details.area summary { cursor: pointer; display: flex; justify-content: space-between; gap: 10px; align-items: center; list-style: none; }
+details.area summary::-webkit-details-marker { display: none; }
+.rel-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rel-t.plan td { height: 11mm; vertical-align: top; }

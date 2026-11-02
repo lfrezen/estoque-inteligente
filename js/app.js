@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  var D = window.DATA, E = window.Engine, M = window.MEDS;
+  var D = window.DATA, E = window.Engine, M = window.MEDS, PRONT = window.PRONT;
   var KEY = 'estoque-inteligente-v1';
 
   var DEFAULT = {
@@ -39,7 +39,7 @@
   function fname(f, sub) { return '<div class="fname"><span class="em" aria-hidden="true">' + em(f) + '</span><div>' + esc(f.nome) + (sub ? '<div class="muted">' + sub + '</div>' : '') + '</div></div>'; }
 
   var TABS = [
-    ['painel', '📊 Painel'], ['pessoas', '👨‍👩‍👧 Pessoas'], ['estoque', '📦 Estoque'], ['meds', '💊 Medicamentos'], ['compras', '🛒 Compras'],
+    ['painel', '📊 Painel'], ['pessoas', '👨‍👩‍👧 Pessoas'], ['estoque', '📦 Estoque'], ['meds', '💊 Medicamentos'], ['pront', '🧟 Prontidão'], ['compras', '🛒 Compras'],
     ['cardapio', '🍽️ Cardápio'], ['estrategias', '💡 Estratégias'], ['catalogo', '📖 Catálogo'], ['relatorio', '🖨️ Relatório'], ['config', '⚙️ Config e backup']
   ];
 
@@ -55,7 +55,7 @@
   function render() {
     renderChrome();
     var v = document.getElementById('view');
-    var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, meds: vMeds, compras: vCompras, cardapio: vCardapio, relatorio: vRelatorio,
+    var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, meds: vMeds, pront: vPront, compras: vCompras, cardapio: vCardapio, relatorio: vRelatorio,
       estrategias: vEstrategias, catalogo: vCatalogo, config: vConfig }[tab];
     v.innerHTML = fn();
   }
@@ -122,6 +122,12 @@
           return '<tr><td>' + fname(f) + '</td><td class="num">' + n1(i.kg) + ' kg</td><td class="num">' + n1(i.cozidoKg) + ' kg</td><td class="num">' + (i.porDiaKg > 0 ? dias(i.dias) : '—') + '</td></tr>';
         }).join('') + '</tbody></table></div><p class="muted">Duração de cada item sozinho, seguindo as porções da aba Catálogo.</p></div>';
     }
+
+    // prontidão
+    var psc = PRONT.pontuacao(state, prAuto(an));
+    h += '<div class="card"><div class="flex between"><h3>' + psc.nivel.ic + ' Prontidão para emergências</h3><button class="btn sec" type="button" data-tab="pront">Abrir</button></div>' +
+      '<div class="flex between"><span><b style="font-size:1.6rem">' + psc.score + '</b>/100 · ' + psc.nivel.nome + '</span><span class="muted">' + esc(psc.passos[0] ? 'Próximo: ' + psc.passos[0].txt : '') + '</span></div>' +
+      '<div class="bar ' + (psc.score >= 70 ? '' : psc.score >= 35 ? 'warn' : 'bad') + '" style="margin-top:8px"><i style="width:' + psc.score + '%"></i></div></div>';
 
     // medicamentos
     var mr = M.resumo(state.meds || []);
@@ -309,6 +315,116 @@
     return h;
   }
 
+  /* ---------------- PRONTIDÃO ---------------- */
+  var prOpen = { mochila: true };
+  function pr() {
+    var p = state.pront || (state.pront = {});
+    if (!p.moradia) p.moradia = 'apto'; if (!p.local) p.local = 'cidade';
+    p.marcados = p.marcados || {}; p.plano = p.plano || {}; p.papeis = p.papeis || {}; p.revisao = p.revisao || ''; p.pets = Number(p.pets) || 0; p.carro = !!p.carro;
+    return p;
+  }
+  function prAuto(an) {
+    var meta = state.metaDias || 90, d = an.dias, mr = M.resumo(state.meds || []);
+    var pct = function (v, alvo) { return !isFinite(v) ? 100 : Math.max(0, Math.min(100, v / alvo * 100)); };
+    var rem = mr.essenciais ? mr.essenciaisOk / mr.essenciais * 70 + (mr.total && !mr.vencidos ? 30 : 0) : 0;
+    return {
+      comida: an.tot.kcal > 0 ? pct(d.energia, meta) : 0,
+      agua: state.aguaL > 0 ? pct(d.agua, 14) : 0,
+      gas: state.gasKg > 0 ? pct(d.gas, meta) : 0,
+      remedios: rem
+    };
+  }
+  function prScoreHtml(sc) {
+    var h = '<div class="pr-hero"><div class="pr-num"><b>' + sc.score + '</b><span>de 100</span></div><div><h2>' + sc.nivel.ic + ' ' + sc.nivel.nome + '</h2><p class="muted">' + sc.nivel.txt + '</p></div></div>' +
+      '<div class="pr-parts">' + sc.partes.map(function (p) {
+        return '<div class="meal"><div class="flex between"><span>' + p.ic + ' ' + esc(p.nome) + '</span><span class="muted">' + Math.round(p.pct) + '%</span></div><div class="bar ' + (p.pct >= 70 ? '' : p.pct >= 35 ? 'warn' : 'bad') + '"><i style="width:' + p.pct.toFixed(0) + '%"></i></div></div>';
+      }).join('') + '</div>';
+    return h;
+  }
+  function pesoTxt(g) { return g < 1000 ? n0(g) + ' g' : n1(g / 1000) + ' kg'; }
+  function prItem(it, ctx) {
+    var ok = PRONT.feito(state, it), auto = it.campo && String(pr().plano[it.campo] || '').trim() || (it.id === 'pl_papeis' && ok && !pr().marcados[it.id]);
+    var q = PRONT.qtdTxt(it, ctx);
+    return '<label class="chk" id="it_' + it.id + '"><input type="checkbox" data-act="pr-chk" data-id="' + it.id + '"' + (ok ? ' checked' : '') + (auto ? ' disabled' : '') + '>' +
+      '<span><b>' + esc(it.nome) + '</b> ' + (it.prio === 3 ? '<span class="tag bad">crítico</span> ' : '') + (q ? '<small>' + q + '</small> ' : '') + (it.peso ? '<small>~' + pesoTxt(it.peso) + '</small> ' : '') +
+      (auto ? '<small>(preenchido no plano)</small>' : '') + (it.dica ? '<div class="muted">' + esc(it.dica) + '</div>' : '') + '</span></label>';
+  }
+  function vPront() {
+    var an = E.analyze(state), P0 = pr(), ctx = PRONT.ctxDe(state), sc = PRONT.pontuacao(state, prAuto(an)), hoje = new Date();
+    var h = '<h2>Prontidão para emergências</h2><p class="muted">Apagão, falta de água, enchente, pandemia, desabastecimento, evacuação… e, de brincadeira, até apocalipse zumbi 🧟. A preparação é a mesma: foco em proteção e logística.</p>';
+
+    h += '<div class="card"><h3>🏠 Sobre a sua casa</h3><p class="muted">As listas se ajustam a estas respostas e às pessoas cadastradas.</p><div class="form">' +
+      '<div><label>Moradia</label><select data-act="pr-ctx" data-k="moradia"><option value="apto"' + (P0.moradia === 'apto' ? ' selected' : '') + '>Apartamento</option><option value="casa"' + (P0.moradia === 'casa' ? ' selected' : '') + '>Casa</option></select></div>' +
+      '<div><label>Região</label><select data-act="pr-ctx" data-k="local"><option value="cidade"' + (P0.local === 'cidade' ? ' selected' : '') + '>Cidade</option><option value="interior"' + (P0.local === 'interior' ? ' selected' : '') + '>Interior / zona rural</option></select></div>' +
+      '<div><label>Pets</label><input type="number" min="0" max="20" value="' + P0.pets + '" data-act="pr-ctx" data-k="pets"></div>' +
+      '<div><label><input type="checkbox" data-act="pr-ctx" data-k="carro"' + (P0.carro ? ' checked' : '') + ' style="width:auto"> Tem carro</label></div></div></div>';
+
+    h += '<div class="card" id="prScore">' + prScoreHtml(sc) + '</div>';
+
+    if (sc.passos.length) {
+      h += '<div class="card"><h3>👣 Próximos passos</h3>' + sc.passos.map(function (p) {
+        return '<div class="sug ' + (p.id ? 'medio' : 'alto') + '"><div style="flex:1">' + esc(p.txt) + '</div>' +
+          (p.tab ? '<button class="btn sec" type="button" data-tab="' + p.tab + '">Abrir</button>' : '<button class="btn sec" type="button" data-act="pr-goto" data-id="' + p.id + '">Ir</button>') + '</div>';
+      }).join('') + '</div>';
+    }
+
+    var dr = PRONT.diasDesdeRevisao(state, hoje);
+    h += '<div class="card"><div class="flex between"><div><h3>🔁 Revisão a cada 6 meses</h3><p class="muted">' +
+      (dr === null ? 'Nenhuma revisão registrada. Confira validades, pilhas, água armazenada e a mochila.' : 'Última revisão há ' + dr + ' dia(s)' + (dr > 180 ? ' <b style="color:var(--bad)">· está na hora de revisar</b>' : '') + '.') + '</p></div>' +
+      '<button class="btn" type="button" data-act="pr-revisao">Revisei hoje</button></div></div>';
+
+    // áreas com checklist
+    var its = PRONT.itensVisiveis(state);
+    Object.keys(PRONT.AREAS).forEach(function (k) {
+      var a = PRONT.AREAS[k], list = its.filter(function (i) { return i.area === k; }); if (!list.length) return;
+      var r = PRONT.areaPct(state, k);
+      h += '<details class="card area" data-area="' + k + '"' + (prOpen[k] ? ' open' : '') + '><summary><span>' + a.ic + ' <b>' + esc(a.nome) + '</b></span><span class="muted">' + r.feitos + '/' + r.total + '</span></summary>' +
+        '<div class="bar" style="margin:8px 0"><i style="width:' + r.pct.toFixed(0) + '%"></i></div>';
+      if (k === 'mochila') {
+        var mo = PRONT.mochila(state);
+        h += '<p class="muted">Uma mochila por pessoa, pronta perto da porta. Peso do kit completo: <b>' + n1(mo.total / 1000) + ' kg</b>; já separado: <b>' + n1(mo.marcado / 1000) + ' kg</b>. Referência: adultos em torno de 8 a 12 kg; crianças, bem menos.</p>';
+      }
+      h += list.map(function (i) { return prItem(i, ctx); }).join('');
+      if (k === 'mochila') h += prComida72();
+      h += '</details>';
+    });
+
+    // plano da família
+    var pl = P0.plano;
+    var f = function (k, lbl, ph) { return '<div><label>' + lbl + '</label><input data-act="pr-plano" data-k="' + k + '" value="' + esc(pl[k] || '') + '" placeholder="' + esc(ph || '') + '" maxlength="200"></div>'; };
+    h += '<details class="card area" data-area="plano_form"' + (prOpen.plano_form ? ' open' : '') + '><summary><span>📝 <b>Preencher o plano da família</b></span><span class="muted">sai impresso na aba Relatório</span></summary><div class="form" style="margin-top:10px">' +
+      f('encontro1', 'Ponto de encontro perto de casa', 'ex.: praça da esquina') + f('encontro2', 'Ponto de encontro fora do bairro', 'ex.: casa da tia, no bairro X') +
+      f('contatoFora', 'Contato de fora da cidade (nome e telefone)', '') + f('rotas', 'Rotas de saída combinadas', '') + f('abrigos', 'Abrigos, UBS e hospital mais próximos', '') +
+      f('agua', 'Onde conseguir água se faltar', '') + f('senha', 'Senha da família', 'só vocês sabem') + '</div>' +
+      (state.pessoas.length ? '<h3 style="margin-top:14px">Papel de cada pessoa</h3><div class="form">' + state.pessoas.map(function (p, i) {
+        return '<div><label>' + esc(p.nome || 'Pessoa ' + (i + 1)) + '</label><input data-act="pr-papel" data-id="' + p.id + '" value="' + esc(P0.papeis[p.id] || '') + '" placeholder="ex.: pega a mochila e cuida da Ana" maxlength="120"></div>';
+      }).join('') + '</div>' : '<p class="muted">Cadastre as pessoas na aba Pessoas para definir os papéis.</p>') + '</details>';
+
+    // cenários
+    h += '<div class="card"><h3>🎯 Cenários e o que fazer</h3>' + PRONT.CENARIOS.map(function (c, i) {
+      return '<details class="dica"' + (i === 0 ? ' open' : '') + '><summary>' + c.ic + ' ' + esc(c.t) + '</summary><p>' + esc(c.d) + '</p></details>';
+    }).join('') + '</div>';
+    h += '<div class="card"><h3>📞 Telefones úteis</h3><div class="grid">' + PRONT.TELEFONES.map(function (t) { return '<div class="kpi"><div class="v">' + t[0] + '</div><div class="l">' + t[1] + '</div></div>'; }).join('') + '</div>' +
+      '<div class="disclaimer">Conteúdo informativo, baseado em orientações gerais de proteção civil e Cruz Vermelha. Siga sempre os alertas oficiais da Defesa Civil e das autoridades locais.</div></div>';
+    return h;
+  }
+  function prComida72() {
+    var fm = E.foodMap(E.allFoods(state)), mix = [['amendoim', 300], ['castanha_para', 100], ['biscoito', 400], ['uva_passa', 200], ['rapadura', 200], ['sardinha', 250]];
+    var kcal = 0, g = 0, linhas = mix.map(function (m) { var f = fm[m[0]]; if (!f) return ''; kcal += m[1] * f.kcal / 100; g += m[1]; return esc(f.nome.replace(/ \(.*\)/, '')) + ' ' + m[1] + ' g'; }).filter(Boolean);
+    return '<div class="disclaimer" style="background:var(--info-soft)"><b>🍫 Comida para 72 h por adulto (≈ 6.000 kcal)</b><br>Sugestão que não precisa de fogo nem cozimento: ' + linhas.join(' · ') + '. Total ≈ <b>' + n0(kcal) + ' kcal</b> e <b>' + n1(g / 1000) + ' kg</b>. Evite excesso de salgados: dão sede.</div>';
+  }
+  function prUpdateScore() {
+    var el = document.getElementById('prScore'); if (!el) return;
+    el.innerHTML = prScoreHtml(PRONT.pontuacao(state, prAuto(E.analyze(state))));
+    // itens do plano que dependem de campos preenchidos
+    PRONT.ITENS.forEach(function (it) {
+      if (!it.campo && it.id !== 'pl_papeis') return;
+      var box = document.querySelector('#it_' + it.id + ' input'); if (!box) return;
+      var ok = PRONT.feito(state, it), auto = ok && !pr().marcados[it.id];
+      box.checked = ok; box.disabled = auto;
+    });
+  }
+
   /* ---------------- COMPRAS ---------------- */
   function vCompras() {
     var meta = state.metaDias;
@@ -432,7 +548,7 @@
   }
 
   /* ---------------- RELATÓRIO PARA IMPRIMIR ---------------- */
-  var rel = { caixas: 14, cardapio: true, calendario: true, meds: true };
+  var rel = { caixas: 14, cardapio: true, calendario: true, meds: true, plano: true, mochila: true };
   function p2(n) { return ('0' + n).slice(-2); }
   function fmtData(d) { return p2(d.getDate()) + '/' + p2(d.getMonth() + 1); }
   function fmtDataL(d) { return fmtData(d) + '/' + d.getFullYear(); }
@@ -447,6 +563,8 @@
       '<div><label for="relCx">Caixinhas de uso por alimento</label><select id="relCx" data-act="rel-opt" data-k="caixas">' +
       [7, 14, 21, 30].map(function (n) { return '<option value="' + n + '"' + (rel.caixas === n ? ' selected' : '') + '>' + n + ' dias</option>'; }).join('') + '</select></div>' +
       '<div><label><input type="checkbox" data-act="rel-opt" data-k="cardapio"' + (rel.cardapio ? ' checked' : '') + ' style="width:auto"> Incluir cardápio de 7 dias</label>' +
+      '<label><input type="checkbox" data-act="rel-opt" data-k="plano"' + (rel.plano ? ' checked' : '') + ' style="width:auto"> Incluir plano da família</label>' +
+      '<label><input type="checkbox" data-act="rel-opt" data-k="mochila"' + (rel.mochila ? ' checked' : '') + ' style="width:auto"> Incluir mochila de fuga</label>' +
       '<label><input type="checkbox" data-act="rel-opt" data-k="meds"' + (rel.meds ? ' checked' : '') + ' style="width:auto"> Incluir medicamentos</label>' +
       '<label><input type="checkbox" data-act="rel-opt" data-k="calendario"' + (rel.calendario ? ' checked' : '') + ' style="width:auto"> Incluir calendário de ' + meta + ' dias</label></div>' +
       '<div><button class="btn" type="button" data-act="imprimir">🖨️ Imprimir / salvar PDF</button></div></div></div></div>';
@@ -511,6 +629,28 @@
         '<table class="rel-t"><thead><tr><th style="width:26%">Medicamento</th><th style="width:11%">Para quem</th><th style="width:12%">Quantidade</th><th style="width:10%">Validade</th><th style="width:17%">Situação</th><th style="width:10%">Dura (contínuo)</th><th>Restante</th></tr></thead><tbody>' + mrows + '</tbody></table></section>';
     }
 
+    if (rel.plano) {
+      var P1 = pr(), pl1 = P1.plano, blank = function (v) { return v ? esc(v) : ''; };
+      var campos = [['Ponto de encontro perto de casa', 'encontro1'], ['Ponto de encontro fora do bairro', 'encontro2'], ['Contato de fora da cidade (nome e telefone)', 'contatoFora'], ['Rotas de saída combinadas', 'rotas'], ['Abrigos, UBS e hospital mais próximos', 'abrigos'], ['Onde conseguir água', 'agua'], ['Senha da família', 'senha']];
+      var pessoas = state.pessoas.length ? state.pessoas : [{ id: '', nome: '' }, { id: '', nome: '' }, { id: '', nome: '' }, { id: '', nome: '' }];
+      h += '<section class="rel-sheet"><div class="rel-head"><div><h1>👨‍👩‍👧 Plano da família</h1><div class="rs">Gerado em ' + fmtDataL(hoje) + ' · revisar a cada 6 meses · ' + (P1.moradia === 'casa' ? 'casa' : 'apartamento') + ', ' + (P1.local === 'interior' ? 'interior' : 'cidade') + '</div></div></div>' +
+        '<div class="rel-2col"><div><table class="rel-t plan"><tbody>' + campos.map(function (c) { return '<tr><th style="width:34%;text-align:left">' + c[0] + '</th><td>' + blank(pl1[c[1]]) + '</td></tr>'; }).join('') + '</tbody></table>' +
+        '<div class="rel-foot"><b>Se a família se separar:</b> 1) vá ao ponto de encontro perto; 2) se não puder, ao distante; 3) avise o contato de fora da cidade que está bem; 4) não volte para casa sem aviso oficial de que é seguro.</div></div>' +
+        '<div><table class="rel-t plan"><thead><tr><th style="width:20%">Pessoa</th><th>Papel</th><th style="width:30%">Alergias, doenças, remédios</th></tr></thead><tbody>' + pessoas.map(function (p, i) {
+          return '<tr><td><b>' + esc(p.nome || (p.id ? 'Pessoa ' + (i + 1) : '')) + '</b></td><td>' + blank(P1.papeis[p.id]) + '</td><td></td></tr>';
+        }).join('') + '</tbody></table>' +
+        '<table class="rel-t plan" style="margin-top:8px"><thead><tr><th colspan="2">Telefones úteis</th></tr></thead><tbody>' + PRONT.TELEFONES.map(function (t) { return '<tr><td style="width:18%"><b>' + t[0] + '</b></td><td>' + t[1] + '</td></tr>'; }).join('') +
+        '<tr><td colspan="2">Família / amigo: ________________ Tel: ________________</td></tr><tr><td colspan="2">Médico / farmácia: ________________ Tel: ________________</td></tr></tbody></table></div></div></section>';
+    }
+
+    if (rel.mochila) {
+      var mo2 = PRONT.mochila(state), ps2 = (state.pessoas.length ? state.pessoas : [{ nome: '' }, { nome: '' }]).slice(0, 6);
+      h += '<section class="rel-sheet"><div class="rel-head"><div><h1>🎒 Mochila de fuga (72 horas)</h1><div class="rs">Uma por pessoa, perto da porta. Marque ✓ ao separar cada item. Peso do kit completo ≈ ' + n1(mo2.total / 1000) + ' kg (adultos: 8 a 12 kg; crianças, menos). Revise a cada 6 meses.</div></div></div>' +
+        '<table class="rel-t"><thead><tr><th style="width:44%">Item</th><th style="width:8%">Peso</th>' + ps2.map(function (p, i) { return '<th>' + esc(p.nome || 'Pessoa ' + (i + 1)) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        mo2.itens.map(function (i) { return '<tr><td>' + esc(i.nome) + (i.prio === 3 ? ' <b>*</b>' : '') + '</td><td class="c">' + pesoTxt(i.peso) + '</td>' + ps2.map(function () { return '<td class="c"><i class="box"></i></td>'; }).join('') + '</tr>'; }).join('') +
+        '</tbody></table><div class="rel-foot">* item crítico. Comida para 72 h por adulto (≈ 6.000 kcal) sem cozimento: amendoim, castanhas, biscoito, uva-passa, rapadura e sardinha em lata.</div></section>';
+    }
+
     if (rel.calendario) {
       var dE = Math.floor(d.energia), dP = Math.floor(d.proteina), dA = state.aguaL > 0 ? Math.floor(d.agua) : Infinity, dG = state.gasKg > 0 ? Math.floor(d.gas) : Infinity;
       var cells = '';
@@ -554,6 +694,8 @@
     else if (act === 'cat-mais') { cat.n += 80; catRefresh(); }
     else if (act === 'novo-alimento') { prefillNome = t.dataset.nome || ''; tab = 'catalogo'; render(); var f = document.getElementById('novoNome'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); } }
     else if (act === 'imprimir') window.print();
+    else if (act === 'pr-revisao') { var d0 = new Date(); pr().revisao = d0.getFullYear() + '-' + ('0' + (d0.getMonth() + 1)).slice(-2) + '-' + ('0' + d0.getDate()).slice(-2); save(); render(); }
+    else if (act === 'pr-goto') { var it0 = PRONT.ITENS.filter(function (x) { return x.id === id; })[0]; if (it0) { prOpen[it0.area] = true; render(); var el0 = document.getElementById('it_' + id); if (el0) el0.scrollIntoView({ block: 'center' }); } }
     else if (act === 'del-med') { state.meds = state.meds.filter(function (m) { return m.id !== id; }); save(); render(); }
     else if (act === 'med-add-cat') { medPre = id; render(); var mn = document.getElementById('medNome'); if (mn) { mn.scrollIntoView({ block: 'center' }); document.getElementById('medQtd').focus(); } }
     else if (act === 'export') exportar();
@@ -567,6 +709,10 @@
   document.addEventListener('change', function (e) {
     var t = e.target;
     var act = t.dataset && t.dataset.act; if (!act) return;
+    if (act === 'pr-chk') { pr().marcados[t.dataset.id] = t.checked; save(); render(); return; }
+    if (act === 'pr-ctx') { var kx = t.dataset.k; pr()[kx] = kx === 'carro' ? t.checked : kx === 'pets' ? Math.max(0, Number(t.value) || 0) : t.value; save(); render(); return; }
+    if (act === 'pr-plano') { pr().plano[t.dataset.k] = t.value; save(); prUpdateScore(); return; }
+    if (act === 'pr-papel') { pr().papeis[t.dataset.id] = t.value; save(); prUpdateScore(); return; }
     if (act === 'med-cat') { var mc = M.catPorId(t.value); if (mc) { document.getElementById('medForma').value = mc.forma; var nn = document.getElementById('medNome'); if (!nn.value) nn.value = mc.nome.replace(/ \(.*\)/, ''); } return; }
     if (act === 'med-cont') { var dz = document.getElementById('medDose'); dz.disabled = !t.checked; if (!t.checked) dz.value = ''; return; }
     if (act === 'med-qtd') { var mq = find(state.meds, t.dataset.id); if (mq) { mq.qtd = Math.max(0, Number(t.value) || 0); save(); render(); } return; }
@@ -677,6 +823,7 @@
     if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; document.getElementById('pesoWrap').hidden = true; document.getElementById('pesoIn').value = ''; openCombo(); }
     else if (t.id === 'catQ') { cat.q = t.value; cat.n = 80; catRefresh(); }
   });
+  document.addEventListener('toggle', function (e) { var d = e.target; if (d && d.dataset && d.dataset.area) prOpen[d.dataset.area] = d.open; }, true);
   document.addEventListener('focusin', function (e) { if (e.target.id === 'foodQ') openCombo(); });
   document.addEventListener('keydown', function (e) {
     if (e.target.id !== 'foodQ') return;

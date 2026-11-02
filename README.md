@@ -7,6 +7,7 @@ para a sua família, com sugestões de compras, estratégias de economia e card�
 - Base inicial de alimentos com rendimento cru→cozido, calorias, proteína, validade (editável, aceita novos itens).
 - Duração por energia, proteína, água e gás; alertas de validade; lista de compras para a meta de dias.
 - Medicamentos (aba Medicamentos): cadastro com validade, quantidade e uso contínuo, kit essencial, orientação por nível de risco para itens vencidos e dicas de armazenamento. Conteúdo informativo, sem doses.
+- Prontidão (aba Prontidão): pontuação de 0 a 100 com níveis, checklists de luz, comunicação, higiene, segurança, mochila de fuga de 72 h, plano da família, cuidado com crianças, idosos e pets e carro, cenários de emergência e revisão a cada 6 meses.
 - Relatório para imprimir (aba Relatório): folhas A4 em paisagem com controle da despensa, cardápio de 7 dias e calendário de dias, para fixar na geladeira e usar sem energia nem internet.
 - Dados guardados no navegador (localStorage), com exportação/importação em JSON.
 
