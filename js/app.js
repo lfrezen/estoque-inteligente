@@ -1,11 +1,11 @@
 (function () {
   'use strict';
-  var D = window.DATA, E = window.Engine, M = window.MEDS, PRONT = window.PRONT;
+  var D = window.DATA, E = window.Engine, M = window.MEDS, PRONT = window.PRONT, DRIVE = window.DRIVE;
   var KEY = 'estoque-inteligente-v1';
 
   var DEFAULT = {
     versao: 1, modo: 'normal', metaDias: 90, pessoas: [], estoque: [], meds: [], custom: [], porcoes: {},
-    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, atualizado: null
+    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, atualizado: null, drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
   };
   var state = load();
   var tab = 'painel';
@@ -14,13 +14,14 @@
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
-      if (raw) return Object.assign({}, DEFAULT, JSON.parse(raw));
+      if (raw) { var salvo = JSON.parse(raw), st = Object.assign({}, DEFAULT, salvo); st.drive = Object.assign({}, DEFAULT.drive, salvo.drive); return st; }
     } catch (e) { /* storage indisponível */ }
     return JSON.parse(JSON.stringify(DEFAULT));
   }
   function save() {
     state.atualizado = new Date().toISOString();
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignora */ }
+    if (window.DRIVE) agendarDrive();
   }
   function norm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
   function uid() { return 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -679,6 +680,85 @@
     return h;
   }
 
+  /* ---------------- BACKUP NO GOOGLE DRIVE ---------------- */
+  var driveStatus = { txt: '', tipo: '' }, driveTimer = null, emSync = false, driveOcupado = false;
+  function dr() { var d = state.drive || (state.drive = {}); d.clientId = d.clientId || ''; d.auto = !!d.auto; d.ultimo = d.ultimo || ''; d.remotoMod = d.remotoMod || ''; return d; }
+  function driveMsg(txt, tipo) { driveStatus = { txt: txt, tipo: tipo || 'info' }; if (tab === 'config') render(); }
+  function driveErro(e) { driveOcupado = false; var m = { offline: 'Sem internet. Seus dados continuam salvos neste aparelho.' }[e && e.codigo]; driveMsg(m || (e && e.message) || 'Algo deu errado no backup.', 'bad'); }
+  function pacote() { var c = JSON.parse(JSON.stringify(state)); delete c.drive; return { app: 'estoque-inteligente', versao: 1, salvoEm: new Date().toISOString(), dados: c }; }
+  function fmtHora(iso) { return iso ? new Date(iso).toLocaleString('pt-BR') : ''; }
+  function agendarDrive() {
+    var d = state.drive; if (emSync || !d || !d.auto || !DRIVE.temToken()) return;
+    clearTimeout(driveTimer); driveTimer = setTimeout(function () { driveBackup(true); }, window.DRIVE_DEBOUNCE_MS || 45000);
+  }
+  function driveConectar() {
+    var d = dr(); if (driveOcupado) return; driveOcupado = true; driveMsg('Abrindo o login do Google…', 'info');
+    DRIVE.conectar(d.clientId || DRIVE.ID_PADRAO).then(function () { return DRIVE.info(); }).then(function (info) {
+      driveOcupado = false;
+      driveMsg('Conectado ao Google Drive. ' + (info ? 'Backup no Drive: ' + fmtHora(info.modifiedTime) + '.' : 'Ainda não há backup no Drive.'), 'ok');
+    }).catch(driveErro);
+  }
+  function driveBackup(silencioso) {
+    var d = dr();
+    if (!DRIVE.temToken()) { driveMsg('Conecte ao Google primeiro.', 'warn'); return Promise.resolve(); }
+    if (driveOcupado) return Promise.resolve(); driveOcupado = true;
+    if (!silencioso) driveMsg('Salvando no Drive…', 'info');
+    return DRIVE.info().then(function (info) {
+      if (info) {
+        var rem = new Date(info.modifiedTime).getTime(), conhecido = d.remotoMod ? new Date(d.remotoMod).getTime() : 0;
+        if (rem > conhecido + 1000) {
+          if (silencioso) { driveOcupado = false; driveMsg('O Drive tem um backup mais novo (de outro aparelho?). Faça o backup manualmente para escolher o que manter.', 'warn'); return null; }
+          if (!confirm('O backup no Drive é de ' + fmtHora(info.modifiedTime) + ' e foi feito depois da última sincronização deste aparelho (talvez em outro aparelho).\n\nSobrescrever com os dados deste aparelho?')) {
+            driveOcupado = false; driveMsg('Backup cancelado. Use "Restaurar do Drive" se quiser os dados do Drive.', 'info'); return null;
+          }
+        }
+      }
+      return DRIVE.salvar(pacote(), info && info.id).then(function (r) {
+        emSync = true; d.ultimo = new Date().toISOString(); d.remotoMod = r.modifiedTime; save(); emSync = false;
+        driveOcupado = false; driveMsg('Backup salvo no Drive em ' + fmtHora(d.ultimo) + '.', 'ok');
+      });
+    }).catch(driveErro);
+  }
+  function driveRestaurar() {
+    var d = dr();
+    if (!DRIVE.temToken()) { driveMsg('Conecte ao Google primeiro.', 'warn'); return; }
+    if (driveOcupado) return; driveOcupado = true; driveMsg('Buscando o backup no Drive…', 'info');
+    DRIVE.info().then(function (info) {
+      if (!info) { driveOcupado = false; driveMsg('Não há backup no Drive ainda.', 'warn'); return null; }
+      if (!confirm('Restaurar o backup do Drive, feito em ' + fmtHora(info.modifiedTime) + '?\n\nOs dados atuais deste aparelho serão substituídos.')) { driveOcupado = false; driveMsg('Restauração cancelada.', 'info'); return null; }
+      return DRIVE.baixar(info.id).then(function (p) {
+        var dados = p && p.dados;
+        if (!dados || !Array.isArray(dados.pessoas) || !Array.isArray(dados.estoque)) throw new Error('O arquivo do Drive não parece ser um backup válido do Estoque Inteligente.');
+        var local = JSON.parse(JSON.stringify(d));
+        state = Object.assign({}, DEFAULT, dados, { drive: local });
+        state.drive.remotoMod = info.modifiedTime; state.drive.ultimo = new Date().toISOString();
+        emSync = true; save(); emSync = false; driveOcupado = false;
+        driveMsg('Backup restaurado (de ' + fmtHora(info.modifiedTime) + ').', 'ok');
+      });
+    }).catch(driveErro);
+  }
+  function driveCard() {
+    var d = dr(), on = DRIVE.temToken(), exp = DRIVE.expiraEm(), cor = { ok: 'ok', warn: 'medio', bad: 'alto', info: '' }[driveStatus.tipo] || '';
+    return '<div class="card"><h3>☁️ Backup no Google Drive</h3>' +
+      '<p class="muted">Guarda uma cópia dos seus dados na <b>sua conta Google</b>, numa pasta <b>oculta do app</b>: o app só enxerga o próprio arquivo, nunca o resto do seu Drive, e nada passa por servidor nosso. É só entrar com a sua conta Google; precisa de internet.</p>' +
+      '<div class="flex" style="margin:10px 0">' + (on
+        ? '<button class="btn" type="button" data-act="drive-backup">⬆️ Fazer backup agora</button><button class="btn sec" type="button" data-act="drive-restaurar">⬇️ Restaurar do Drive</button><button class="btn sec" type="button" data-act="drive-desconectar">Desconectar</button>'
+        : '<button class="btn" type="button" data-act="drive-conectar">🔗 Entrar com o Google</button>') + '</div>' +
+      (driveStatus.txt ? '<div class="sug ' + cor + '"><div>' + esc(driveStatus.txt) + '</div></div>' : '') +
+      '<p class="muted">' + (on ? '✅ Conectado' + (exp ? ' até ' + exp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + ' (depois, entre de novo)' : '') : '⚪ Não conectado') +
+      (d.ultimo ? ' · Último backup: ' + fmtHora(d.ultimo) : '') + '</p>' +
+      '<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" data-act="drive-cfg" data-k="auto"' + (d.auto ? ' checked' : '') + ' style="width:auto"> Backup automático alguns segundos depois de cada alteração (enquanto estiver conectado)</label>' +
+      '<p class="muted">Para ter os mesmos dados em outro aparelho: entre com a mesma conta Google lá e toque em <b>Restaurar do Drive</b>. Se o Google mostrar um aviso de "app não verificado", toque em <b>Avançado</b> e continue.</p>' +
+      '<details class="dica"><summary>Avançado: usar o meu próprio ID de cliente Google</summary>' +
+      '<p class="muted">Só para quem hospeda o próprio site em outro endereço. Deixe em branco para usar o padrão do app.</p>' +
+      '<div class="form"><div style="grid-column: 1 / -1"><label for="driveId">ID do cliente Google (opcional)</label><input id="driveId" data-act="drive-cfg" data-k="clientId" value="' + esc(d.clientId) + '" placeholder="123456-abc.apps.googleusercontent.com" autocomplete="off"></div></div>' +
+      '<ol style="margin:8px 0 0 18px;padding:0">' +
+      '<li>Em <b>console.cloud.google.com</b>, crie um projeto e ative a <b>Google Drive API</b> (APIs e serviços → Biblioteca).</li>' +
+      '<li>Configure a <b>Tela de permissão OAuth</b> como <b>Externo</b>, com o escopo <b>drive.appdata</b>, e publique o app (ou adicione usuários de teste).</li>' +
+      '<li>Crie um <b>ID do cliente OAuth</b> do tipo <b>Aplicativo da Web</b> e, em <b>Origens JavaScript autorizadas</b>, adicione <b>' + esc(location.origin) + '</b>.</li>' +
+      '<li>Cole o ID acima e toque em <b>Entrar com o Google</b>.</li></ol></details></div>';
+  }
+
   /* ---------------- CONFIG ---------------- */
   function vConfig() {
     var h = '<h2>Configurações</h2><div class="card"><div class="form">' +
@@ -688,7 +768,8 @@
       '<div><label>Gás armazenado (kg)</label><input type="number" min="0" step="any" value="' + state.gasKg + '" data-act="cfg" data-k="gasKg"></div>' +
       '<div><label>Consumo do fogão (kg/h)</label><input type="number" min="0.05" step="0.05" value="' + state.fogaoKgH + '" data-act="cfg" data-k="fogaoKgH"></div></div>' +
       '<p class="muted">Botijão de 13 kg equivale a 13 kg de gás. Um queimador comum consome cerca de 0,2 kg/h. A estimativa de gás considera apenas o tempo de fogo dos alimentos que exigem cozimento.</p></div>';
-    h += '<div class="card"><h3>Backup dos dados</h3><p class="muted">Os dados ficam só neste navegador. Exporte um arquivo para guardar ou levar para outro aparelho.' +
+    h += driveCard();
+    h += '<div class="card"><h3>Backup em arquivo</h3><p class="muted">Os dados ficam só neste navegador. Exporte um arquivo para guardar ou levar para outro aparelho.' +
       (state.atualizado ? ' Última alteração: ' + new Date(state.atualizado).toLocaleString('pt-BR') + '.' : '') + '</p>' +
       '<div class="flex"><button class="btn" data-act="export">Exportar JSON</button>' +
       '<label class="btn sec" style="display:inline-block;cursor:pointer;color:var(--ink)">Importar JSON<input type="file" accept="application/json" data-act="import" hidden></label>' +
@@ -711,6 +792,10 @@
     else if (act === 'cat-mais') { cat.n += 80; catRefresh(); }
     else if (act === 'novo-alimento') { prefillNome = t.dataset.nome || ''; tab = 'catalogo'; render(); var f = document.getElementById('novoNome'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); } }
     else if (act === 'imprimir') window.print();
+    else if (act === 'drive-conectar') driveConectar();
+    else if (act === 'drive-backup') driveBackup(false);
+    else if (act === 'drive-restaurar') driveRestaurar();
+    else if (act === 'drive-desconectar') { clearTimeout(driveTimer); DRIVE.desconectar(); driveMsg('Desconectado do Google. Seus dados continuam neste aparelho.', 'info'); }
     else if (act === 'pr-revisao') { var d0 = new Date(); pr().revisao = d0.getFullYear() + '-' + ('0' + (d0.getMonth() + 1)).slice(-2) + '-' + ('0' + d0.getDate()).slice(-2); save(); render(); }
     else if (act === 'pr-goto') { var it0 = PRONT.ITENS.filter(function (x) { return x.id === id; })[0]; if (it0) { prOpen[it0.area] = true; render(); var el0 = document.getElementById('it_' + id); if (el0) el0.scrollIntoView({ block: 'center' }); } }
     else if (act === 'del-med') { state.meds = state.meds.filter(function (m) { return m.id !== id; }); save(); render(); }
@@ -718,7 +803,7 @@
     else if (act === 'export') exportar();
     else if (act === 'reset') {
       if (confirm('Apagar TODOS os dados deste navegador? Esta ação não pode ser desfeita.')) {
-        state = JSON.parse(JSON.stringify(DEFAULT)); save(); render();
+        var dd = dr(); state = JSON.parse(JSON.stringify(DEFAULT)); state.drive.clientId = dd.clientId; state.drive.auto = dd.auto; /* ultimo e remotoMod zerados: o próximo backup avisa antes de sobrescrever o Drive */ save(); render();
       }
     }
   });
@@ -726,6 +811,7 @@
   document.addEventListener('change', function (e) {
     var t = e.target;
     var act = t.dataset && t.dataset.act; if (!act) return;
+    if (act === 'drive-cfg') { var dc = dr(); if (t.dataset.k === 'auto') { dc.auto = t.checked; save(); render(); if (dc.auto) agendarDrive(); } else { dc.clientId = t.value.trim(); save(); } return; }
     if (act === 'pr-chk') { pr().marcados[t.dataset.id] = t.checked; save(); render(); return; }
     if (act === 'pr-ctx') { var kx = t.dataset.k; pr()[kx] = kx === 'carro' ? t.checked : kx === 'pets' ? Math.max(0, Number(t.value) || 0) : t.value; save(); render(); return; }
     if (act === 'pr-plano') { pr().plano[t.dataset.k] = t.value; save(); prUpdateScore(); return; }

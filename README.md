@@ -10,6 +10,7 @@ para a sua família, com sugestões de compras, estratégias de economia e card�
 - Medicamentos (aba Medicamentos): cadastro com validade, quantidade e uso contínuo, kit essencial, orientação por nível de risco para itens vencidos e dicas de armazenamento. Conteúdo informativo, sem doses.
 - Prontidão (aba Prontidão): pontuação de 0 a 100 com níveis, checklists de luz, comunicação, higiene, segurança, mochila de fuga de 72 h, plano da família, cuidado com crianças, idosos e pets e carro, cenários de emergência e revisão a cada 6 meses.
 - Relatório para imprimir (aba Relatório): folhas A4 em paisagem com controle da despensa, cardápio de 7 dias e calendário de dias, para fixar na geladeira e usar sem energia nem internet.
+- Backup no Google Drive (aba Config e backup): login do Google no próprio navegador e arquivo na pasta oculta do app (escopo `drive.appdata`), sem servidor intermediário. O token fica só na memória. O app já traz um ID de cliente OAuth padrão (público por natureza, vale só nas origens autorizadas): quem usa só entra com a conta Google. Quem hospedar o próprio site em outro endereço pode informar o seu ID em Avançado, com o passo a passo na própria tela. Conflitos entre aparelhos pedem confirmação antes de sobrescrever.
 - Dados guardados no navegador (localStorage), com exportação/importação em JSON.
 
 Uso: abra `index.html` ou publique a pasta no GitHub Pages / Cloudflare Pages.
