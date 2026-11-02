@@ -1125,6 +1125,7 @@
     }
     if (todos.length > comboItems.length) h += '<li class="more muted">Mostrando ' + comboItems.length + ' de ' + todos.length + '. Continue digitando para refinar.</li>';
     ul.innerHTML = h; ul.hidden = false; q.setAttribute('aria-expanded', 'true');
+    ul.style.top = (q.offsetTop + q.offsetHeight + 4) + 'px'; /* a lista abre na largura de todo o formulário */
   }
   function closeCombo() {
     var q = document.getElementById('foodQ'), ul = document.getElementById('foodList');

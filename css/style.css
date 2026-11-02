@@ -139,6 +139,10 @@ button:focus-visible, .tabs button:focus-visible, .seg button:focus-visible { ou
 
 /* Seletor com busca */
 .combo { position: relative; }
+.form[data-form=estoque] { position: relative; }
+.form[data-form=estoque] .combo { position: static; }
+.form[data-form=estoque] .combo ul { max-height: 380px; }
+.form[data-form=estoque] .combo li[role=option] { padding: 8px 10px; }
 .combo ul { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); max-height: 320px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
 .combo li[role=option] { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
 .combo li[role=option] small { display: block; color: var(--muted); font-size: .74rem; }
