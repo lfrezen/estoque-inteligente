@@ -6,6 +6,7 @@ para a sua família, com sugestões de compras, estratégias de economia e card�
 - Cadastro de pessoas (perfis por faixa etária, gestante, lactante) e modos Normal / Racionamento / Emergência.
 - Base inicial de alimentos com rendimento cru→cozido, calorias, proteína, validade (editável, aceita novos itens).
 - Duração por energia, proteína, água e gás; alertas de validade; lista de compras para a meta de dias.
+- Relatório para imprimir (aba Relatório): folhas A4 em paisagem com controle da despensa, cardápio de 7 dias e calendário de dias, para fixar na geladeira e usar sem energia nem internet.
 - Dados guardados no navegador (localStorage), com exportação/importação em JSON.
 
 Uso: abra `index.html` ou publique a pasta no GitHub Pages / Cloudflare Pages.

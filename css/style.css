@@ -147,3 +147,43 @@ button:focus-visible, .tabs button:focus-visible, .seg button:focus-visible { ou
 .combo .none, .combo .more { padding: 8px; color: var(--muted); font-size: .9rem; } .combo .none .btn, .combo .more .btn { margin-top: 6px; width: 100%; }
 tbody tr[hidden] { display: none; }
 @media (max-width: 560px) { .combo { grid-column: 1 / -1; } }
+
+/* ---------- Relatório para imprimir ---------- */
+.rel-sheet { background: #fff; color: #111; border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 18px; overflow-x: auto; }
+.rel-sheet h1 { font-size: 1.25rem; margin: 0 0 2px; color: #111; }
+.rel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.rel-sheet .rs { font-size: .8rem; color: #444; }
+.rel-kpis { display: flex; gap: 8px; }
+.rk { border: 1.5px solid #222; border-radius: 6px; padding: 4px 10px; min-width: 112px; }
+.rk .rl { font-size: .7rem; color: #444; } .rk .rv { font-size: 1.15rem; font-weight: 800; line-height: 1.15; } .rk .rs { font-size: .68rem; }
+.rel-t { width: 100%; border-collapse: collapse; font-size: .78rem; table-layout: fixed; color: #111; }
+.rel-t th, .rel-t td { border: 1px solid #777; padding: 3px 5px; vertical-align: middle; background: #fff; color: #111; text-transform: none; letter-spacing: 0; }
+.rel-t th { background: #e9e9e9; font-size: .7rem; text-align: center; font-weight: 700; }
+.rel-t td.c { text-align: center; } .rel-t small { color: #444; font-size: .66rem; }
+.rel-t tr.grp td { background: #f0f0f0; font-weight: 700; font-size: .72rem; padding: 2px 6px; }
+.rel-t td.rest { height: 8mm; } .rel-t tbody.g { break-inside: avoid; page-break-inside: avoid; }
+.rel-t td.bx { line-height: 1; padding: 3px; }
+.rel-t.menu td { vertical-align: top; font-size: .74rem; line-height: 1.35; height: 16mm; }
+.rel-t.menu th:first-child { width: 8%; }
+.box { display: inline-block; width: 4.3mm; height: 4.3mm; border: 1px solid #222; margin: 0 .4mm .4mm 0; font-size: 5px; line-height: 4.3mm; text-align: center; color: #888; font-style: normal; vertical-align: middle; }
+.box.big { width: 7mm; height: 7mm; display: block; margin: 1px auto 0; }
+.rel-foot { font-size: .74rem; margin-top: 8px; color: #333; }
+.cal-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.cal { border: 1px solid #555; border-radius: 4px; padding: 2px 3px; min-height: 14.5mm; font-size: .7rem; text-align: center; background: #fff; color: #111; position: relative; }
+.cal b { font-size: .85rem; display: block; line-height: 1.1; } .cal span { color: #555; font-size: .62rem; display: block; }
+.cal.sem { background: repeating-linear-gradient(45deg, #fff, #fff 3px, #ddd 3px, #ddd 4px); }
+.cal.marca { border: 2px solid #000; } .cal em { display: block; font-style: normal; font-size: .58rem; font-weight: 700; line-height: 1.15; }
+
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+  :root { --bg: #fff; --card: #fff; --ink: #000; --muted: #333; --line: #999; }
+  html, body { background: #fff !important; color: #000 !important; font-size: 12px; }
+  .top, .tabs, .foot, .no-print, footer { display: none !important; }
+  main { max-width: none !important; padding: 0 !important; animation: none !important; }
+  .rel-sheet { border: 0; border-radius: 0; padding: 0; margin: 0; overflow: visible; page-break-after: always; break-after: page; }
+  .rel-sheet:last-of-type { page-break-after: auto; break-after: auto; }
+  .rel-t thead { display: table-header-group; }
+  .rel-t tr { page-break-inside: avoid; break-inside: avoid; }
+  .rel-t th, .rel-t td, .cal, .rk, .box, .rel-t tr.grp td, .cal.sem { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+@media (max-width: 560px) { .cal-grid { grid-template-columns: repeat(5, 1fr); } }
