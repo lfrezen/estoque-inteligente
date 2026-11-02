@@ -34,7 +34,7 @@
     feijao: '🫘', lentilha: '🫘', grao_bico: '🫘', soja_texturizada: '🌱', atum: '🐟', sardinha: '🐟', ovo: '🥚', leite_po: '🥛',
     oleo: '🫒', amendoim: '🥜', pasta_amendoim: '🥜', acucar: '🧂', sal: '🧂', milho_lata: '🌽', molho_tomate: '🍅', uva_passa: '🍇',
     batata: '🥔', vitamina: '💊' };
-  var GEMOJI = { cereal: '🌾', leguminosa: '🫘', proteina: '🐟', laticinio: '🥛', gordura: '🫒', acucar: '🍬', vegetal: '🥕', micro: '💊', essencial: '🧂' };
+  var GEMOJI = { cereal: '🌾', leguminosa: '🫘', proteina: '🐟', laticinio: '🥛', gordura: '🫒', acucar: '🍬', vegetal: '🥕', micro: '💊', essencial: '🧂', fruta: '🍎', carne: '🥩', pescado: '🐟', bebida: '🥤', preparado: '🍲', outros: '🍽️' };
   function em(f) { return EMOJI[f.id] || GEMOJI[f.grupo] || '🍽️'; }
   function fname(f, sub) { return '<div class="fname"><span class="em" aria-hidden="true">' + em(f) + '</span><div>' + esc(f.nome) + (sub ? '<div class="muted">' + sub + '</div>' : '') + '</div></div>'; }
 
@@ -295,22 +295,43 @@
   }
 
   /* ---------------- CATÁLOGO ---------------- */
+  var cat = { q: '', n: 80 };
+  function catList() {
+    var foods = E.allFoods(state), order = Object.keys(D.GRUPOS), toks = norm(cat.q).split(/\s+/).filter(Boolean);
+    foods = foods.filter(function (f) {
+      if (!toks.length) return true;
+      var hay = norm(f.nome + ' ' + (f.alias || '') + ' ' + D.GRUPOS[f.grupo]);
+      return toks.every(function (t) { return hay.indexOf(t) >= 0; });
+    });
+    foods.sort(function (a, b) { return (a.taco ? 1 : 0) - (b.taco ? 1 : 0) || order.indexOf(a.grupo) - order.indexOf(b.grupo); });
+    return foods;
+  }
+  function catRows() {
+    var foods = catList(), vis = foods.slice(0, cat.n);
+    var rows = vis.map(function (f) {
+      var ov = state.porcoes[f.id];
+      var src = f.fonte ? '<span class="tag src" title="' + (f.fonte === 'TACO' ? 'Valor da Tabela TACO (UNICAMP)' : f.fonte === 'Rótulo' ? 'Valor tirado do rótulo do fabricante' : 'Valor conferido na USDA FoodData Central') + '">' + f.fonte + '</span>' : '<span class="tag est" title="Estimativa de referência, ainda não conferida em tabela">estimado</span>';
+      return '<tr title="' + esc(f.dica || '') + '"><td>' + fname(f, D.GRUPOS[f.grupo] + ' · ' + src) + '</td>' +
+        '<td class="num">×' + n1(f.rend) + (f.rend > 1 ? '<div class="muted">1 kg → ' + n1(f.rend) + ' kg</div>' : '') + '</td>' +
+        '<td class="num">' + n0(f.kcal / (f.rend || 1)) + '</td>' +
+        '<td class="num"><input type="number" min="0" step="1" value="' + f.porcao + '" data-act="porcao" data-id="' + f.id + '" style="width:80px" aria-label="Porção de ' + esc(f.nome) + '">' +
+        (ov !== undefined ? ' <button class="btn del" data-act="reset-porcao" data-id="' + f.id + '" title="Restaurar padrão">↺</button>' : '') + '</td>' +
+        '<td class="num">' + f.val + ' m</td></tr>';
+    }).join('');
+    if (!foods.length) rows = '<tr><td colspan="5" class="muted">Nenhum alimento encontrado.</td></tr>';
+    if (foods.length > vis.length) rows += '<tr><td colspan="5" style="text-align:center"><button type="button" class="btn sec" data-act="cat-mais">Mostrar mais ' + Math.min(80, foods.length - vis.length) + ' (restam ' + (foods.length - vis.length) + ')</button></td></tr>';
+    return { html: rows, total: foods.length, shown: vis.length };
+  }
+  function catRefresh() {
+    var r = catRows(), tb = document.querySelector('#catTable tbody'), c = document.getElementById('catCount');
+    if (tb) tb.innerHTML = r.html;
+    if (c) c.textContent = r.shown < r.total ? r.shown + ' de ' + r.total + ' alimentos' : r.total + ' alimento(s)';
+  }
   function vCatalogo() {
-    var foods = E.allFoods(state), order = Object.keys(D.GRUPOS);
-    foods.sort(function (a, b) { return order.indexOf(a.grupo) - order.indexOf(b.grupo); });
-    var h = '<h2>Catálogo de alimentos</h2><p class="muted">Rendimento e porção são editáveis. <b>Porção</b> = gramas prontas por dia, por pessoa de referência (2.000 kcal) no modo normal. Os modos reduzem automaticamente. Itens com porção 0 contam calorias no estoque, mas não entram na lista de compras.</p>' +
-      '<div class="card"><div class="flex between" style="margin-bottom:10px"><input id="catQ" type="search" placeholder="Buscar no catálogo…" style="max-width:340px" aria-label="Buscar no catálogo"><span class="muted" id="catCount">' + foods.length + ' alimento(s)</span></div>' +
-      '<div class="scroll"><table id="catTable"><thead><tr><th>Alimento</th><th class="num">Rendimento</th><th class="num">kcal/100g pronto</th><th class="num">Porção (g)</th><th class="num">Validade</th></tr></thead><tbody>' +
-      foods.map(function (f) {
-        var ov = state.porcoes[f.id];
-        var src = f.fonte ? '<span class="tag src" title="' + (f.fonte === 'TACO' ? 'Valor conferido na Tabela TACO (UNICAMP)' : f.fonte === 'Rótulo' ? 'Valor tirado do rótulo do fabricante' : 'Valor conferido na USDA FoodData Central') + '">' + f.fonte + '</span>' : '<span class="tag est" title="Estimativa de referência, ainda não conferida em tabela">estimado</span>';
-        return '<tr data-q="' + esc(norm(f.nome + ' ' + (f.alias || '') + ' ' + D.GRUPOS[f.grupo])) + '" title="' + esc(f.dica || '') + '"><td>' + fname(f, D.GRUPOS[f.grupo] + ' · ' + src) + '</td>' +
-          '<td class="num">×' + n1(f.rend) + (f.rend > 1 ? '<div class="muted">1 kg → ' + n1(f.rend) + ' kg</div>' : '') + '</td>' +
-          '<td class="num">' + n0(f.kcal / (f.rend || 1)) + '</td>' +
-          '<td class="num"><input type="number" min="0" step="1" value="' + f.porcao + '" data-act="porcao" data-id="' + f.id + '" style="width:80px" aria-label="Porção de ' + esc(f.nome) + '">' +
-          (ov !== undefined ? ' <button class="btn del" data-act="reset-porcao" data-id="' + f.id + '" title="Restaurar padrão">↺</button>' : '') + '</td>' +
-          '<td class="num">' + f.val + ' m</td></tr>';
-      }).join('') + '</tbody></table></div></div>';
+    var r = catRows();
+    var h = '<h2>Catálogo de alimentos</h2><p class="muted">Rendimento e porção são editáveis. <b>Porção</b> = gramas prontas por dia, por pessoa de referência (2.000 kcal) no modo normal. Os modos reduzem automaticamente. Itens com porção 0 contam calorias no estoque, mas não entram na lista de compras. Os itens da Tabela TACO vêm com porção 0: defina uma porção para incluí-los nos cálculos de duração.</p>' +
+      '<div class="card"><div class="flex between" style="margin-bottom:10px"><input id="catQ" type="search" placeholder="Buscar no catálogo…" value="' + esc(cat.q) + '" style="max-width:340px" aria-label="Buscar no catálogo"><span class="muted" id="catCount">' + (r.shown < r.total ? r.shown + ' de ' + r.total + ' alimentos' : r.total + ' alimento(s)') + '</span></div>' +
+      '<div class="scroll"><table id="catTable"><thead><tr><th>Alimento</th><th class="num">Rendimento</th><th class="num">kcal/100g pronto</th><th class="num">Porção (g)</th><th class="num">Validade</th></tr></thead><tbody>' + r.html + '</tbody></table></div></div>';
     h += '<p class="muted">Fontes: <b>TACO</b> = Tabela Brasileira de Composição de Alimentos (UNICAMP); <b>USDA</b> = USDA FoodData Central; <b>estimado</b> = valor de referência ainda não conferido. Rendimento, porção, tempo de cozimento e validade são sempre estimativas médias.</p>' +
       '<div class="card"><h3>Adicionar alimento</h3><form class="form" data-form="custom">' +
       '<div><label for="novoNome">Nome</label><input id="novoNome" name="nome" required maxlength="50" value="' + esc(prefillNome) + '"></div>' +
@@ -355,6 +376,7 @@
     if (act === 'del-pessoa') { state.pessoas = state.pessoas.filter(function (p) { return p.id !== id; }); save(); render(); }
     else if (act === 'del-estoque') { state.estoque = state.estoque.filter(function (s) { return s.id !== id; }); save(); render(); }
     else if (act === 'reset-porcao') { delete state.porcoes[id]; save(); render(); }
+    else if (act === 'cat-mais') { cat.n += 80; catRefresh(); }
     else if (act === 'novo-alimento') { prefillNome = t.dataset.nome || ''; tab = 'catalogo'; render(); var f = document.getElementById('novoNome'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); } }
     else if (act === 'export') exportar();
     else if (act === 'reset') {
@@ -416,18 +438,18 @@
       res.sort(function (a, b) {
         var sa = norm(a.nome).indexOf(t0) === 0 ? 0 : norm(a.nome).indexOf(t0) > 0 ? 1 : 2;
         var sb = norm(b.nome).indexOf(t0) === 0 ? 0 : norm(b.nome).indexOf(t0) > 0 ? 1 : 2;
-        return sa - sb || a.nome.localeCompare(b.nome, 'pt-BR');
+        return sa - sb || (a.taco ? 1 : 0) - (b.taco ? 1 : 0) || a.nome.localeCompare(b.nome, 'pt-BR');
       });
     } else {
       var order = Object.keys(D.GRUPOS);
-      res.sort(function (a, b) { return order.indexOf(a.grupo) - order.indexOf(b.grupo) || a.nome.localeCompare(b.nome, 'pt-BR'); });
+      res.sort(function (a, b) { return (a.taco ? 1 : 0) - (b.taco ? 1 : 0) || order.indexOf(a.grupo) - order.indexOf(b.grupo) || a.nome.localeCompare(b.nome, 'pt-BR'); });
     }
     return res;
   }
   function openCombo() {
     var q = document.getElementById('foodQ'), ul = document.getElementById('foodList'); if (!q || !ul) return;
     var txt = document.getElementById('foodId').value ? '' : q.value;
-    comboItems = matchFoods(txt).slice(0, 60); comboIdx = comboItems.length ? 0 : -1;
+    var todos = matchFoods(txt); comboItems = todos.slice(0, 60); comboIdx = comboItems.length ? 0 : -1;
     var h = comboItems.map(function (f, i) {
       return '<li role="option" id="opt' + i + '" data-pick="' + f.id + '" aria-selected="' + (i === comboIdx) + '">' +
         '<span class="em" aria-hidden="true">' + em(f) + '</span><span>' + esc(f.nome) + '<small>' + D.GRUPOS[f.grupo] + '</small></span></li>';
@@ -438,6 +460,7 @@
     } else if (norm(q.value)) {
       h += '<li class="more"><button type="button" class="btn sec" data-act="novo-alimento" data-nome="' + esc(q.value) + '">➕ Não achou? Cadastrar “' + esc(q.value) + '”</button></li>';
     }
+    if (todos.length > comboItems.length) h += '<li class="more muted">Mostrando ' + comboItems.length + ' de ' + todos.length + '. Continue digitando para refinar.</li>';
     ul.innerHTML = h; ul.hidden = false; q.setAttribute('aria-expanded', 'true');
   }
   function closeCombo() {
@@ -464,14 +487,7 @@
   document.addEventListener('input', function (e) {
     var t = e.target;
     if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; document.getElementById('pesoWrap').hidden = true; document.getElementById('pesoIn').value = ''; openCombo(); }
-    else if (t.id === 'catQ') {
-      var q = norm(t.value), n = 0;
-      document.querySelectorAll('#catTable tbody tr').forEach(function (tr) {
-        var ok = !q || q.split(/\s+/).every(function (k) { return tr.dataset.q.indexOf(k) >= 0; });
-        tr.hidden = !ok; if (ok) n++;
-      });
-      var c = document.getElementById('catCount'); if (c) c.textContent = n + ' alimento(s)';
-    }
+    else if (t.id === 'catQ') { cat.q = t.value; cat.n = 80; catRefresh(); }
   });
   document.addEventListener('focusin', function (e) { if (e.target.id === 'foodQ') openCombo(); });
   document.addEventListener('keydown', function (e) {
