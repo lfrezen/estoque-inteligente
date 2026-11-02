@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estoque Inteligente</title>
+<meta name="description" content="Controle de alimentos armazenados e quanto tempo duram para a sua família.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">🥫 <strong>Estoque Inteligente</strong></div>
+  <label class="modo">Modo:
+    <select id="modo" aria-label="Modo de consumo"></select>
+  </label>
+</header>
+<nav id="tabs" class="tabs" role="tablist"></nav>
+<main id="view" tabindex="-1"></main>
+<footer class="foot">
+  Estimativas baseadas em tabelas públicas (TACO/USDA) e valores médios. Não substituem orientação de nutricionista ou médico.
+  Seus dados ficam apenas neste navegador.
+</footer>
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
