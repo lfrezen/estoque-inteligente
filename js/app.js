@@ -949,11 +949,12 @@
   function vConfig() {
     var h = '<h2>Configurações</h2><div class="card"><div class="form">' +
       '<div><label>Meta (dias)</label><input type="number" min="1" max="730" value="' + state.metaDias + '" data-act="cfg" data-k="metaDias"></div>' +
-      '<div><label>Água armazenada (litros)</label><input type="number" min="0" step="any" value="' + state.aguaL + '" data-act="cfg" data-k="aguaL"><small class="muted">Total guardado: caixa d\'água, galões, garrafas. Ex.: caixa de 500 L = 500.</small></div>' +
-      '<div><label>Água de higiene (L por pessoa, por dia)</label><input type="number" min="0" step="any" value="' + state.aguaHigiene + '" data-act="cfg" data-k="aguaHigiene"><small class="muted">Quanto cada pessoa usa por dia além de beber (mãos, louça, banho de gato). Não é o total da caixa. Padrão: 1.</small></div>' +
+      '<div><label>Água armazenada (litros)</label><input type="number" min="0" step="any" value="' + state.aguaL + '" data-act="cfg" data-k="aguaL"></div>' +
+      '<div><label>Água de higiene (L por pessoa, por dia)</label><input type="number" min="0" step="any" value="' + state.aguaHigiene + '" data-act="cfg" data-k="aguaHigiene"></div>' +
       '<div><label>Gás armazenado (kg)</label><input type="number" min="0" step="any" value="' + state.gasKg + '" data-act="cfg" data-k="gasKg"></div>' +
       '<div><label>Avisar vencimentos com (dias)</label><input type="number" min="1" max="365" step="1" value="' + (Number(state.validadeJanela) || 30) + '" data-act="cfg" data-k="validadeJanela"></div>' +
       '<div><label>Consumo do fogão (kg/h)</label><input type="number" min="0.05" step="0.05" value="' + state.fogaoKgH + '" data-act="cfg" data-k="fogaoKgH"></div></div>' +
+      '<p class="muted"><b>Água armazenada</b> é o total guardado (caixa d\'água, galões, garrafas): uma caixa de 500 L = 500. <b>Água de higiene</b> é quanto cada pessoa usa por dia além de beber (mãos, louça), padrão 1; não é o total da caixa.</p>' +
       '<p class="muted">Botijão de 13 kg equivale a 13 kg de gás. Um queimador comum consome cerca de 0,2 kg/h. A estimativa de gás considera apenas o tempo de fogo dos alimentos que exigem cozimento.</p></div>';
     h += driveCard();
     h += '<div class="card"><h3>Backup em arquivo</h3><p class="muted">Os dados ficam só neste navegador. Exporte um arquivo para guardar ou levar para outro aparelho.' +
