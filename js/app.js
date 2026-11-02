@@ -949,8 +949,8 @@
   function vConfig() {
     var h = '<h2>Configurações</h2><div class="card"><div class="form">' +
       '<div><label>Meta (dias)</label><input type="number" min="1" max="730" value="' + state.metaDias + '" data-act="cfg" data-k="metaDias"></div>' +
-      '<div><label>Água armazenada (litros)</label><input type="number" min="0" step="any" value="' + state.aguaL + '" data-act="cfg" data-k="aguaL"></div>' +
-      '<div><label>Água de higiene (L/pessoa/dia)</label><input type="number" min="0" step="any" value="' + state.aguaHigiene + '" data-act="cfg" data-k="aguaHigiene"></div>' +
+      '<div><label>Água armazenada (litros)</label><input type="number" min="0" step="any" value="' + state.aguaL + '" data-act="cfg" data-k="aguaL"><small class="muted">Total guardado: caixa d\'água, galões, garrafas. Ex.: caixa de 500 L = 500.</small></div>' +
+      '<div><label>Água de higiene (L por pessoa, por dia)</label><input type="number" min="0" step="any" value="' + state.aguaHigiene + '" data-act="cfg" data-k="aguaHigiene"><small class="muted">Quanto cada pessoa usa por dia além de beber (mãos, louça, banho de gato). Não é o total da caixa. Padrão: 1.</small></div>' +
       '<div><label>Gás armazenado (kg)</label><input type="number" min="0" step="any" value="' + state.gasKg + '" data-act="cfg" data-k="gasKg"></div>' +
       '<div><label>Avisar vencimentos com (dias)</label><input type="number" min="1" max="365" step="1" value="' + (Number(state.validadeJanela) || 30) + '" data-act="cfg" data-k="validadeJanela"></div>' +
       '<div><label>Consumo do fogão (kg/h)</label><input type="number" min="0.05" step="0.05" value="' + state.fogaoKgH + '" data-act="cfg" data-k="fogaoKgH"></div></div>' +
