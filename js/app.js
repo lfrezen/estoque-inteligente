@@ -206,6 +206,7 @@
       '<input id="foodQ" type="text" role="combobox" aria-expanded="false" aria-controls="foodList" aria-autocomplete="list" autocomplete="off" placeholder="Digite para buscar: arroz, quinoa, lentilha…">' +
       '<input type="hidden" name="foodId" id="foodId"><ul id="foodList" role="listbox" hidden></ul></div>' +
       '<div><label for="qtdIn">Quantidade <span id="unitLbl">(kg)</span></label><input id="qtdIn" name="qtd" type="number" min="0" step="any" required></div>' +
+      '<div id="pesoWrap" hidden><label for="pesoIn">Peso drenado por unidade (g)</label><input id="pesoIn" name="pesoUn" type="number" min="1" step="any" placeholder="ex.: 179"></div>' +
       '<div><label>Validade (opcional)</label><input name="validade" type="date"></div>' +
       '<div><button class="btn" type="submit">Adicionar</button></div></form>' +
       '<p class="muted" id="foodHint">' + foods.length + ' alimentos no catálogo. Comece a digitar o nome.</p></div>';
@@ -215,9 +216,10 @@
     h += '<div class="card"><div class="scroll"><table><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Dura</th><th></th></tr></thead><tbody>' +
       state.estoque.map(function (s) {
         var f = fm[s.foodId]; if (!f) return '';
-        var kg = E.toKg(f, s.qtd), it = byFood[f.id];
+        var kg = E.lineKg(f, s), it = byFood[f.id];
         return '<tr><td>' + fname(f) + '</td>' +
-          '<td class="num"><input type="number" min="0" step="any" value="' + s.qtd + '" data-act="qtd" data-id="' + s.id + '" style="width:85px"> ' + unitLabel(f).replace('(s)', '') + '</td>' +
+          '<td class="num"><input type="number" min="0" step="any" value="' + s.qtd + '" data-act="qtd" data-id="' + s.id + '" style="width:85px" aria-label="Quantidade"> ' + unitLabel(f).replace('(s)', '') +
+            (f.un === 'un' ? ' × <input type="number" min="1" step="any" value="' + (Number(s.pesoUn) > 0 ? s.pesoUn : f.gpu) + '" data-act="pesoUn" data-id="' + s.id + '" style="width:72px" aria-label="Peso por unidade em gramas"> g' : '') + '</td>' +
           '<td class="num">' + n1(kg * f.rend) + '</td><td class="num">' + n0(kg * 10 * f.kcal) + '</td>' +
           '<td><input type="date" value="' + esc(s.validade || '') + '" data-act="validade" data-id="' + s.id + '"></td>' +
           '<td class="num">' + (it && it.porDiaKg > 0 ? dias(it.dias) : '—') + '</td>' +
@@ -239,7 +241,7 @@
       dp.rows.map(function (r) {
         var u = r.food.un === 'kg' ? 'kg' : r.food.un === 'l' ? 'L' : 'un';
         var dec = r.food.un === 'un' ? n0 : n1;
-        return '<tr><td>' + fname(r.food) + '</td><td class="num">' + dec(r.necessarioQtd) + ' ' + u + '</td><td class="num">' + dec(r.temQtd) + ' ' + u +
+        return '<tr><td>' + fname(r.food, r.refG ? 'unidades de ' + n0(r.refG) + ' g' : '') + '</td><td class="num">' + dec(r.necessarioQtd) + ' ' + u + '</td><td class="num">' + dec(r.temQtd) + ' ' + u +
           '</td><td class="num"><b>' + (r.faltaKg > 0.001 ? dec(r.faltaQtd) + ' ' + u : '✓') + '</b></td>' +
           '<td><div class="bar ' + (r.pct >= 100 ? '' : r.pct >= 50 ? 'warn' : 'bad') + '"><i style="width:' + r.pct.toFixed(0) + '%"></i></div></td></tr>';
       }).join('') + '</tbody></table></div></div>';
@@ -301,7 +303,7 @@
       '<div class="scroll"><table id="catTable"><thead><tr><th>Alimento</th><th class="num">Rendimento</th><th class="num">kcal/100g pronto</th><th class="num">Porção (g)</th><th class="num">Validade</th></tr></thead><tbody>' +
       foods.map(function (f) {
         var ov = state.porcoes[f.id];
-        var src = f.fonte ? '<span class="tag src" title="Valor conferido em ' + (f.fonte === 'TACO' ? 'Tabela TACO (UNICAMP)' : 'USDA FoodData Central') + '">' + f.fonte + '</span>' : '<span class="tag est" title="Estimativa de referência, ainda não conferida em tabela">estimado</span>';
+        var src = f.fonte ? '<span class="tag src" title="' + (f.fonte === 'TACO' ? 'Valor conferido na Tabela TACO (UNICAMP)' : f.fonte === 'Rótulo' ? 'Valor tirado do rótulo do fabricante' : 'Valor conferido na USDA FoodData Central') + '">' + f.fonte + '</span>' : '<span class="tag est" title="Estimativa de referência, ainda não conferida em tabela">estimado</span>';
         return '<tr data-q="' + esc(norm(f.nome + ' ' + (f.alias || '') + ' ' + D.GRUPOS[f.grupo])) + '" title="' + esc(f.dica || '') + '"><td>' + fname(f, D.GRUPOS[f.grupo] + ' · ' + src) + '</td>' +
           '<td class="num">×' + n1(f.rend) + (f.rend > 1 ? '<div class="muted">1 kg → ' + n1(f.rend) + ' kg</div>' : '') + '</td>' +
           '<td class="num">' + n0(f.kcal / (f.rend || 1)) + '</td>' +
@@ -365,7 +367,8 @@
   document.addEventListener('change', function (e) {
     var t = e.target;
     var act = t.dataset && t.dataset.act; if (!act) return;
-    if (act === 'qtd') { var s = find(state.estoque, t.dataset.id); if (s) { s.qtd = Math.max(0, Number(t.value) || 0); save(); render(); } }
+    if (act === 'pesoUn') { var sp = find(state.estoque, t.dataset.id); if (sp) { sp.pesoUn = Math.max(0, Number(t.value) || 0); save(); render(); } }
+    else if (act === 'qtd') { var s = find(state.estoque, t.dataset.id); if (s) { s.qtd = Math.max(0, Number(t.value) || 0); save(); render(); } }
     else if (act === 'validade') { var s2 = find(state.estoque, t.dataset.id); if (s2) { s2.validade = t.value; save(); render(); } }
     else if (act === 'porcao') { state.porcoes[t.dataset.id] = Math.max(0, Number(t.value) || 0); save(); render(); }
     else if (act === 'cfg') { var v = Number(t.value); state[t.dataset.k] = isFinite(v) && v >= 0 ? v : 0; if (t.dataset.k === 'metaDias' && !state.metaDias) state.metaDias = 90; save(); render(); }
@@ -387,7 +390,8 @@
       if (!fid) { document.getElementById('foodHint').textContent = '⚠️ Escolha um alimento da lista (ou cadastre um novo).'; document.getElementById('foodQ').focus(); return; }
       if (!(qtd > 0)) return;
       focusSearch = true;
-      state.estoque.push({ id: uid(), foodId: fid, qtd: qtd, validade: fd.get('validade') || '' });
+      var ff = E.foodMap(E.allFoods(state))[fid], peso = Number(fd.get('pesoUn'));
+      state.estoque.push({ id: uid(), foodId: fid, qtd: qtd, pesoUn: ff && ff.un === 'un' && peso > 0 ? peso : 0, validade: fd.get('validade') || '' });
     } else if (kind === 'custom') {
       var un = fd.get('un'), gpu = Number(fd.get('gpu')) || (un === 'l' ? 1000 : 1);
       state.custom.push({ id: 'c_' + uid(), nome: String(fd.get('nome')).trim(), grupo: fd.get('grupo'), un: un, gpu: gpu,
@@ -459,7 +463,7 @@
 
   document.addEventListener('input', function (e) {
     var t = e.target;
-    if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; openCombo(); }
+    if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; document.getElementById('pesoWrap').hidden = true; document.getElementById('pesoIn').value = ''; openCombo(); }
     else if (t.id === 'catQ') {
       var q = norm(t.value), n = 0;
       document.querySelectorAll('#catTable tbody tr').forEach(function (tr) {
@@ -487,7 +491,9 @@
   function updateFoodHint() {
     var sel = document.getElementById('foodId'); if (!sel || !sel.value) return;
     var f = E.foodMap(E.allFoods(state))[sel.value]; if (!f) return;
-    document.getElementById('unitLbl').textContent = '(' + (f.un === 'kg' ? 'kg' : f.un === 'l' ? 'litros' : 'unidades de ' + f.gpu + ' g') + ')';
+    document.getElementById('unitLbl').textContent = '(' + (f.un === 'kg' ? 'kg' : f.un === 'l' ? 'litros' : 'unidades') + ')';
+    var pw = document.getElementById('pesoWrap'), pi = document.getElementById('pesoIn');
+    if (pw && pi) { pw.hidden = f.un !== 'un'; if (f.un === 'un' && !pi.value) pi.value = f.gpu; if (f.un !== 'un') pi.value = ''; }
     document.getElementById('foodHint').textContent = (f.dica || '') + (f.rend > 1 ? ' Rendimento: 1 kg → ' + n1(f.rend) + ' kg pronto.' : '');
   }
   var origRender = render;
