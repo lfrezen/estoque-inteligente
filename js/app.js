@@ -861,11 +861,27 @@
     var d = state.drive; if (emSync || !d || !d.auto || !DRIVE.temToken()) return;
     clearTimeout(driveTimer); driveTimer = setTimeout(function () { driveBackup(true); }, window.DRIVE_DEBOUNCE_MS || 45000);
   }
+  /* texto estável para comparar dados: chaves em ordem e sem o carimbo de última alteração */
+  function canonico(o) {
+    return JSON.stringify(o, function (k, v) {
+      if (k === 'atualizado') return undefined;
+      if (v && typeof v === 'object' && !Array.isArray(v)) { var r = {}; Object.keys(v).sort().forEach(function (x) { r[x] = v[x]; }); return r; }
+      return v;
+    });
+  }
   function driveConectar() {
     var d = dr(); if (driveOcupado) return; driveOcupado = true; driveMsg('Abrindo o login do Google…', 'info');
     DRIVE.conectar(d.clientId || DRIVE.ID_PADRAO).then(function () { return DRIVE.info(); }).then(function (info) {
-      driveOcupado = false;
-      driveMsg('Conectado ao Google Drive. ' + (info ? 'Backup no Drive: ' + fmtHora(info.modifiedTime) + '.' : 'Ainda não há backup no Drive.'), 'ok');
+      if (!info) { driveOcupado = false; driveMsg('Conectado ao Google Drive. Ainda não há backup no Drive.', 'ok'); return null; }
+      /* Outro navegador/aparelho pode já ter salvo exatamente estes dados: se o Drive for igual ao que está aqui,
+         este aparelho passa a contar esse backup como o último (sem pedir backup de novo). */
+      return DRIVE.baixar(info.id).then(function (p) {
+        var igual = false;
+        try { igual = !!(p && p.dados) && canonico(p.dados) === canonico(pacote().dados); } catch (e) { igual = false; }
+        if (igual) { emSync = true; d.ultimo = info.modifiedTime; d.remotoMod = info.modifiedTime; save(); emSync = false; }
+        driveOcupado = false;
+        driveMsg('Conectado ao Google Drive. Backup no Drive: ' + fmtHora(info.modifiedTime) + (igual ? ' (igual aos dados deste aparelho).' : '.'), 'ok');
+      });
     }).catch(driveErro);
   }
   function driveBackup(silencioso) {
@@ -1109,6 +1125,7 @@
     }
     if (todos.length > comboItems.length) h += '<li class="more muted">Mostrando ' + comboItems.length + ' de ' + todos.length + '. Continue digitando para refinar.</li>';
     ul.innerHTML = h; ul.hidden = false; q.setAttribute('aria-expanded', 'true');
+    ul.style.top = (q.offsetTop + q.offsetHeight + 4) + 'px'; /* a lista abre na largura de todo o formulário */
   }
   function closeCombo() {
     var q = document.getElementById('foodQ'), ul = document.getElementById('foodList');
