@@ -13,12 +13,12 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand">🥫 <strong>Estoque Inteligente</strong></div>
-  <label class="modo">Modo:
-    <select id="modo" aria-label="Modo de consumo"></select>
-  </label>
+  <div class="top-in">
+    <div class="brand"><span class="logo" aria-hidden="true">🥫</span><div><strong>Estoque Inteligente</strong><small>Quanto tempo a sua despensa dura</small></div></div>
+    <div id="modo" class="seg" role="group" aria-label="Modo de consumo"></div>
+  </div>
 </header>
-<nav id="tabs" class="tabs" role="tablist"></nav>
+<nav class="tabs" aria-label="Seções"><div id="tabs" class="tabs-in" role="tablist"></div></nav>
 <main id="view" tabindex="-1"></main>
 <footer class="foot">
   Estimativas baseadas em tabelas públicas (TACO/USDA) e valores médios. Não substituem orientação de nutricionista ou médico.

@@ -28,15 +28,22 @@
   function dias(d) { return E.fmtDias(d); }
   function cls(d, meta) { return !isFinite(d) ? 'ok' : d >= meta ? 'ok' : d >= meta / 3 ? 'warn' : 'bad'; }
 
+  var EMOJI = { arroz: '🍚', macarrao: '🍝', aveia: '🥣', fuba: '🌽', farinha_mandioca: '🥔', farinha_trigo: '🌾', biscoito: '🍪',
+    feijao: '🫘', lentilha: '🫘', grao_bico: '🫘', soja_texturizada: '🌱', atum: '🐟', sardinha: '🐟', ovo: '🥚', leite_po: '🥛',
+    oleo: '🫒', amendoim: '🥜', pasta_amendoim: '🥜', acucar: '🧂', sal: '🧂', milho_lata: '🌽', molho_tomate: '🍅', uva_passa: '🍇',
+    batata: '🥔', vitamina: '💊' };
+  var GEMOJI = { cereal: '🌾', leguminosa: '🫘', proteina: '🐟', laticinio: '🥛', gordura: '🫒', acucar: '🍬', vegetal: '🥕', micro: '💊', essencial: '🧂' };
+  function em(f) { return EMOJI[f.id] || GEMOJI[f.grupo] || '🍽️'; }
+  function fname(f, sub) { return '<div class="fname"><span class="em" aria-hidden="true">' + em(f) + '</span><div>' + esc(f.nome) + (sub ? '<div class="muted">' + sub + '</div>' : '') + '</div></div>'; }
+
   var TABS = [
-    ['painel', 'Painel'], ['pessoas', 'Pessoas'], ['estoque', 'Estoque'], ['compras', 'Compras'],
-    ['cardapio', 'Cardápio'], ['estrategias', 'Estratégias'], ['catalogo', 'Catálogo'], ['config', 'Config e backup']
+    ['painel', '📊 Painel'], ['pessoas', '👨‍👩‍👧 Pessoas'], ['estoque', '📦 Estoque'], ['compras', '🛒 Compras'],
+    ['cardapio', '🍽️ Cardápio'], ['estrategias', '💡 Estratégias'], ['catalogo', '📖 Catálogo'], ['config', '⚙️ Config e backup']
   ];
 
   function renderChrome() {
-    var sel = document.getElementById('modo');
-    sel.innerHTML = Object.keys(D.MODOS).map(function (k) {
-      return '<option value="' + k + '"' + (state.modo === k ? ' selected' : '') + '>' + D.MODOS[k].nome + '</option>';
+    document.getElementById('modo').innerHTML = Object.keys(D.MODOS).map(function (k) {
+      return '<button type="button" data-modo="' + k + '" aria-pressed="' + (state.modo === k) + '">' + D.MODOS[k].nome + '</button>';
     }).join('');
     document.getElementById('tabs').innerHTML = TABS.map(function (t) {
       return '<button role="tab" data-tab="' + t[0] + '" aria-selected="' + (tab === t[0]) + '">' + t[1] + '</button>';
@@ -60,18 +67,22 @@
       return h + '<div class="card">Comece em <b>Pessoas</b> para informar quantas pessoas moram na casa. Depois cadastre o <b>Estoque</b>.</div>';
     }
     var pct = isFinite(d.energia) ? Math.min(100, d.energia / meta * 100) : 100;
+    var c = cls(d.energia, meta), R = 70, C = 2 * Math.PI * R;
+    var veredito = d.energia >= meta ? 'Meta atingida em calorias 🎉' : d.energia >= meta / 3 ? 'Já tem uma boa base. Ainda falta chegar à meta.' : 'Estoque curto para a meta. Veja a aba Compras.';
+    h += '<div class="card hero"><div class="ring ' + c + '" role="img" aria-label="' + n0(pct) + '% da meta">' +
+      '<svg viewBox="0 0 168 168"><circle class="trk" cx="84" cy="84" r="' + R + '" fill="none" stroke-width="14"/>' +
+      '<circle class="val" cx="84" cy="84" r="' + R + '" fill="none" stroke-width="14" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - pct / 100)).toFixed(1) + '"/></svg>' +
+      '<div class="mid"><b>' + (isFinite(d.energia) ? n0(d.energia) : '∞') + '</b><span>dias de ' + meta + '</span></div></div>' +
+      '<div><h2>' + veredito + '</h2><p class="muted">' + esc(modoDesc) + '</p>' +
+      '<div class="chips"><span class="chip">👥 ' + an.h.n + ' pessoa(s)</span><span class="chip">🔥 ' + n0(an.h.kcal) + ' kcal/dia</span><span class="chip">🎯 meta ' + meta + ' dias</span></div></div></div>';
     h += '<div class="grid">' +
-      kpi('Energia (calorias)', dias(d.energia), cls(d.energia, meta), 'Meta: ' + meta + ' dias') +
-      kpi('Proteína', dias(d.proteina), cls(d.proteina, meta), n0(an.h.prot) + ' g/dia necessários') +
-      (state.aguaL > 0 ? kpi('Água', dias(d.agua), cls(d.agua, Math.min(meta, 14)), n1(an.aguaDia) + ' L/dia (inclui cozimento)')
-        : kpi('Água', 'Informe', 'warn', 'Preencha em Config. Precisa de ' + n1(an.aguaDia) + ' L/dia')) +
-      (state.gasKg > 0 ? kpi('Gás de cozinha', dias(d.gas), cls(d.gas, meta), (Math.round(an.gasDia * 100) / 100).toLocaleString('pt-BR') + ' kg/dia estimados')
-        : kpi('Gás de cozinha', 'Informe', 'warn', 'Preencha em Config. Uso: ' + (Math.round(an.gasDia * 100) / 100).toLocaleString('pt-BR') + ' kg/dia')) +
+      kpi('Energia', dias(d.energia), cls(d.energia, meta), 'Meta: ' + meta + ' dias', '🔥') +
+      kpi('Proteína', dias(d.proteina), cls(d.proteina, meta), n0(an.h.prot) + ' g/dia necessários', '💪') +
+      (state.aguaL > 0 ? kpi('Água', dias(d.agua), cls(d.agua, Math.min(meta, 14)), n1(an.aguaDia) + ' L/dia (inclui cozimento)', '💧')
+        : kpi('Água', 'Informe', 'warn', 'Preencha em Config. Precisa de ' + n1(an.aguaDia) + ' L/dia', '💧')) +
+      (state.gasKg > 0 ? kpi('Gás de cozinha', dias(d.gas), cls(d.gas, meta), (Math.round(an.gasDia * 100) / 100).toLocaleString('pt-BR') + ' kg/dia estimados', '🧯')
+        : kpi('Gás de cozinha', 'Informe', 'warn', 'Preencha em Config. Uso: ' + (Math.round(an.gasDia * 100) / 100).toLocaleString('pt-BR') + ' kg/dia', '🧯')) +
       '</div>';
-    h += '<div class="card" style="margin-top:16px"><h3>Progresso até ' + meta + ' dias</h3>' +
-      '<div class="bar ' + cls(d.energia, meta) + '"><i style="width:' + pct.toFixed(0) + '%"></i></div>' +
-      '<p class="muted">' + an.h.n + ' pessoa(s) · modo <b>' + D.MODOS[state.modo].nome + '</b>: ' + esc(modoDesc) +
-      ' Necessidade da casa: <b>' + n0(an.h.kcal) + ' kcal/dia</b>.</p></div>';
 
     // comparação de modos
     h += '<div class="card"><h3>Quanto dura em cada modo</h3><table><thead><tr><th>Modo</th><th class="num">Energia</th><th class="num">Proteína</th><th class="num">Ganho vs normal</th></tr></thead><tbody>';
@@ -87,28 +98,26 @@
     // alertas e sugestões
     var sug = E.sugestoes(state, an, meta);
     h += '<div class="card"><h3>Alertas e sugestões</h3>' + sug.map(function (s) {
-      return '<div class="sug ' + s.nivel + '"><b>' + esc(s.t) + '</b>' + esc(s.d) + '</div>';
+      var ic = { alto: '⚠️', medio: '⚡', ok: '✅', baixo: 'ℹ️', info: '💡' }[s.nivel] || '💡';
+      return '<div class="sug ' + s.nivel + '"><span class="ic" aria-hidden="true">' + ic + '</span><div><b>' + esc(s.t) + '</b>' + esc(s.d) + '</div></div>';
     }).join('') + '</div>';
 
-    // equilíbrio
+    // macronutrientes
+    h += macroCard(an, meta);
     var tot = an.tot.kcal || 1;
-    h += '<div class="row2"><div class="card"><h3>Equilíbrio de nutrientes</h3>' +
-      macroBar('Carboidrato', an.macros.carb, '45–65%', an.macros.carb >= 45 && an.macros.carb <= 70) +
-      macroBar('Proteína', an.macros.prot, '10–20%', an.macros.prot >= 10 && an.macros.prot <= 25) +
-      macroBar('Gordura', an.macros.gord, '20–35%', an.macros.gord >= 18 && an.macros.gord <= 38) + '</div>';
     h += '<div class="card"><h3>Calorias por grupo</h3>' + Object.keys(D.GRUPOS).map(function (g) {
       var v = (an.grupos[g] || 0); if (!v) return '';
       var dd = v / an.h.kcal;
-      return '<div class="meal"><div class="flex" style="justify-content:space-between"><span>' + D.GRUPOS[g] + '</span><span class="muted">' + dias(dd) + ' (' + n0(v / tot * 100) + '%)</span></div>' +
+      return '<div class="meal"><div class="flex between"><span>' + GEMOJI[g] + ' ' + D.GRUPOS[g] + '</span><span class="muted">' + dias(dd) + ' (' + n0(v / tot * 100) + '%)</span></div>' +
         '<div class="bar"><i style="width:' + Math.min(100, v / tot * 100) + '%"></i></div></div>';
-    }).join('') + '</div></div>';
+    }).join('') + '</div>';
 
     // por alimento
     if (an.items.length) {
       h += '<div class="card"><h3>Duração por alimento</h3><div class="scroll"><table><thead><tr><th>Alimento</th><th class="num">Estoque</th><th class="num">Pronto</th><th class="num">Duração</th></tr></thead><tbody>' +
         an.items.map(function (i) {
           var f = i.food;
-          return '<tr><td>' + esc(f.nome) + '</td><td class="num">' + n1(i.kg) + ' kg</td><td class="num">' + n1(i.cozidoKg) + ' kg</td><td class="num">' + (i.porDiaKg > 0 ? dias(i.dias) : '—') + '</td></tr>';
+          return '<tr><td>' + fname(f) + '</td><td class="num">' + n1(i.kg) + ' kg</td><td class="num">' + n1(i.cozidoKg) + ' kg</td><td class="num">' + (i.porDiaKg > 0 ? dias(i.dias) : '—') + '</td></tr>';
         }).join('') + '</tbody></table></div><p class="muted">Duração de cada item sozinho, seguindo as porções da aba Catálogo.</p></div>';
     }
 
@@ -123,7 +132,42 @@
     }
     return h;
   }
-  function kpi(l, v, c, sub) { return '<div class="kpi ' + c + '"><div class="l">' + l + '</div><div class="v">' + v + '</div><div class="l">' + sub + '</div></div>'; }
+  function kpi(l, v, c, sub, ic) { return '<div class="kpi ' + c + '"><div class="l"><span class="ic" aria-hidden="true">' + (ic || '') + '</span> ' + l + '</div><div class="v">' + v + '</div><div class="l">' + sub + '</div></div>'; }
+  function donut(parts) {
+    var R = 54, C = 2 * Math.PI * R, off = 0, out = '';
+    parts.forEach(function (p) {
+      var len = C * p.pct / 100;
+      out += '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="' + p.cor + '" stroke-width="18" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '"/>';
+      off += len;
+    });
+    return '<svg viewBox="0 0 140 140" style="transform:rotate(-90deg)" aria-hidden="true"><circle cx="70" cy="70" r="' + R + '" fill="none" stroke="var(--bar)" stroke-width="18"/>' + out + '</svg>';
+  }
+  function macroCard(an, meta) {
+    var m = an.macro, mc = an.macros;
+    var def = [
+      { k: 'carb', nome: 'Carboidratos', ic: '🍚', cor: 'var(--accent)', faixa: '45–65%', ok: mc.carb >= 45 && mc.carb <= 70, pct: mc.carb },
+      { k: 'prot', nome: 'Proteínas', ic: '🥩', cor: 'var(--bad)', faixa: '10–20%', ok: mc.prot >= 10 && mc.prot <= 25, pct: mc.prot },
+      { k: 'gord', nome: 'Gorduras', ic: '🫒', cor: 'var(--info)', faixa: '20–35%', ok: mc.gord >= 18 && mc.gord <= 38, pct: mc.gord }
+    ];
+    var kg = function (g) { return g >= 1000 ? n1(g / 1000) + ' kg' : n0(g) + ' g'; };
+    var h = '<div class="card"><h3>🥗 Carboidratos, proteínas e gorduras do estoque</h3>' +
+      '<p class="muted">Quanto de cada nutriente existe nos alimentos que você tem, comparado ao que a casa precisa por dia (proteína pelo perfil de cada pessoa; gordura cerca de 28% das calorias; carboidrato o restante).</p>' +
+      '<div class="macro-wrap"><div class="donut">' + donut(def.map(function (d) { return { pct: d.pct, cor: d.cor }; })) +
+      '<div class="mid"><b>' + n0(an.tot.kcal) + '</b><span>kcal no estoque</span></div></div><div class="macro-list">';
+    def.forEach(function (d) {
+      var x = m[d.k], c = cls(x.dias, meta), pctMeta = isFinite(x.dias) ? Math.min(100, x.dias / meta * 100) : 100;
+      h += '<div class="macro"><div class="flex between"><b><span class="dot" style="background:' + d.cor + '"></span>' + d.ic + ' ' + d.nome + '</b>' +
+        '<span class="tag ' + (d.ok ? '' : 'est') + '" title="Faixa recomendada: ' + d.faixa + ' das calorias">' + n0(d.pct) + '% das kcal</span></div>' +
+        '<div class="flex between muted"><span>Estoque: <b>' + kg(x.tem) + '</b></span><span>Precisa: <b>' + n0(x.precisa) + ' g/dia</b></span><span>Dura: <b>' + dias(x.dias) + '</b></span></div>' +
+        '<div class="bar ' + (c === 'ok' ? '' : c) + '" title="' + n0(pctMeta) + '% da meta de ' + meta + ' dias"><i style="width:' + pctMeta.toFixed(0) + '%"></i></div>' +
+        (x.fontes.length ? '<div class="muted src">Principais fontes: ' + x.fontes.map(function (f) { return em(f.food) + ' ' + esc(f.food.nome.replace(/ \(.*\)/, '')) + ' ' + n0(f.pct) + '%'; }).join(' · ') + '</div>' : '') + '</div>';
+    });
+    h += '</div></div>';
+    var menor = def.slice().sort(function (a, b) { return m[a.k].dias - m[b.k].dias; })[0];
+    if (isFinite(m[menor.k].dias) && m[menor.k].dias < meta)
+      h += '<p class="muted" style="margin-top:10px">⚠️ O nutriente que acaba primeiro é <b>' + menor.nome.toLowerCase() + '</b> (' + dias(m[menor.k].dias) + '). Reforce essa categoria nas compras.</p>';
+    return h + '</div>';
+  }
   function macroBar(nome, v, faixa, ok) {
     return '<div class="meal"><div class="flex" style="justify-content:space-between"><span>' + nome + '</span><span class="muted">' + n0(v) + '% · ideal ' + faixa + '</span></div>' +
       '<div class="bar ' + (ok ? '' : 'warn') + '"><i style="width:' + Math.min(100, v) + '%"></i></div></div>';
@@ -136,7 +180,7 @@
       '<div><label>Perfil</label><select name="perfil">' + Object.keys(D.PERFIS).map(function (k) { return '<option value="' + k + '">' + D.PERFIS[k].nome + '</option>'; }).join('') + '</select></div>' +
       '<div><label>kcal/dia (opcional)</label><input name="kcal" type="number" min="500" max="5000" step="50" placeholder="Padrão do perfil"></div>' +
       '<div><button class="btn" type="submit">Adicionar</button></div></form></div>';
-    if (!state.pessoas.length) return h + '<p class="empty">Nenhuma pessoa cadastrada.</p>';
+    if (!state.pessoas.length) return h + '<div class="empty"><big>👨‍👩‍👧</big>Nenhuma pessoa cadastrada. Adicione acima quem mora na casa.</div>';
     var hh = E.household(state);
     h += '<div class="card"><div class="scroll"><table><thead><tr><th>Nome</th><th>Perfil</th><th class="num">kcal/dia</th><th class="num">No modo atual</th><th></th></tr></thead><tbody>' +
       state.pessoas.map(function (p, i) {
@@ -168,14 +212,14 @@
       '<div><label>Validade (opcional)</label><input name="validade" type="date"></div>' +
       '<div><button class="btn" type="submit">Adicionar</button></div></form>' +
       '<p class="muted" id="foodHint"></p></div>';
-    if (!state.estoque.length) return h + '<p class="empty">Estoque vazio.</p>';
+    if (!state.estoque.length) return h + '<div class="empty"><big>📦</big>Estoque vazio. Adicione o primeiro alimento acima.</div>';
     var an = E.analyze(state);
     var byFood = {}; an.items.forEach(function (i) { byFood[i.food.id] = i; });
     h += '<div class="card"><div class="scroll"><table><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Dura</th><th></th></tr></thead><tbody>' +
       state.estoque.map(function (s) {
         var f = fm[s.foodId]; if (!f) return '';
         var kg = E.toKg(f, s.qtd), it = byFood[f.id];
-        return '<tr><td>' + esc(f.nome) + '</td>' +
+        return '<tr><td>' + fname(f) + '</td>' +
           '<td class="num"><input type="number" min="0" step="any" value="' + s.qtd + '" data-act="qtd" data-id="' + s.id + '" style="width:85px"> ' + unitLabel(f).replace('(s)', '') + '</td>' +
           '<td class="num">' + n1(kg * f.rend) + '</td><td class="num">' + n0(kg * 10 * f.kcal) + '</td>' +
           '<td><input type="date" value="' + esc(s.validade || '') + '" data-act="validade" data-id="' + s.id + '"></td>' +
@@ -189,7 +233,7 @@
   function vCompras() {
     var meta = state.metaDias;
     var h = '<h2>Compras para ' + meta + ' dias</h2>';
-    if (!state.pessoas.length) return h + '<p class="empty">Cadastre as pessoas primeiro.</p>';
+    if (!state.pessoas.length) return h + '<div class="empty"><big>👥</big>Cadastre as pessoas primeiro.</div>';
     var dp = E.despensa(state, state.modo, meta);
     h += '<p class="muted">Lista para ' + dp.h.n + ' pessoa(s) em modo <b>' + D.MODOS[state.modo].nome + '</b>, considerando o que você já tem. ' +
       'O que faltar de calorias é completado com arroz, que é barato e dura muito.</p>';
@@ -198,7 +242,7 @@
       dp.rows.map(function (r) {
         var u = r.food.un === 'kg' ? 'kg' : r.food.un === 'l' ? 'L' : 'un';
         var dec = r.food.un === 'un' ? n0 : n1;
-        return '<tr><td>' + esc(r.food.nome) + '</td><td class="num">' + dec(r.necessarioQtd) + ' ' + u + '</td><td class="num">' + dec(r.temQtd) + ' ' + u +
+        return '<tr><td>' + fname(r.food) + '</td><td class="num">' + dec(r.necessarioQtd) + ' ' + u + '</td><td class="num">' + dec(r.temQtd) + ' ' + u +
           '</td><td class="num"><b>' + (r.faltaKg > 0.001 ? dec(r.faltaQtd) + ' ' + u : '✓') + '</b></td>' +
           '<td><div class="bar ' + (r.pct >= 100 ? '' : r.pct >= 50 ? 'warn' : 'bad') + '"><i style="width:' + r.pct.toFixed(0) + '%"></i></div></td></tr>';
       }).join('') + '</tbody></table></div></div>';
@@ -217,17 +261,17 @@
   function vCardapio() {
     var an = E.analyze(state);
     var h = '<h2>Cardápio sugerido</h2>';
-    if (!an.h.n || !an.items.length) return h + '<p class="empty">Cadastre pessoas e estoque para gerar o cardápio.</p>';
+    if (!an.h.n || !an.items.length) return h + '<div class="empty"><big>🍽️</big>Cadastre pessoas e estoque para gerar o cardápio.</div>';
     h += '<p class="muted">Quantidades <b>prontas para comer</b> (g) para a casa toda, no modo ' + D.MODOS[state.modo].nome + ', usando só o que existe no estoque. Alterna leguminosas e proteínas ao longo dos dias.</p>';
     E.cardapio(state, an, 7).forEach(function (d) {
-      h += '<div class="card"><h3>Dia ' + d.dia + '</h3>' + d.refeicoes.map(function (r) {
+      h += '<div class="card menu-day"><div class="dnum"><small>DIA</small>' + d.dia + '</div><div>' + d.refeicoes.map(function (r) {
         if (!r.itens.length) return '';
         return '<div class="meal"><b>' + r.nome + ':</b> ' + r.itens.map(function (i) {
           var nome = i.food.nome.replace(/ \(.*\)/, '');
           var unidade = i.food.id === 'vitamina' ? ' comp.' : i.food.id === 'leite_po' ? ' ml' : ' g';
-          return esc(nome) + ' ' + n0(i.g) + unidade;
+          return em(i.food) + ' ' + esc(nome) + ' <b>' + n0(i.g) + unidade + '</b>';
         }).join(' · ') + '</div>';
-      }).join('') + '</div>';
+      }).join('') + '</div></div>';
     });
     return h;
   }
@@ -251,14 +295,16 @@
       '<div class="card"><div class="scroll"><table><thead><tr><th>Alimento</th><th class="num">Rendimento</th><th class="num">kcal/100g pronto</th><th class="num">Porção (g)</th><th class="num">Validade</th></tr></thead><tbody>' +
       foods.map(function (f) {
         var ov = state.porcoes[f.id];
-        return '<tr title="' + esc(f.dica || '') + '"><td>' + esc(f.nome) + '<div class="muted">' + D.GRUPOS[f.grupo] + '</div></td>' +
+        var src = f.fonte ? '<span class="tag src" title="Valor conferido em ' + (f.fonte === 'TACO' ? 'Tabela TACO (UNICAMP)' : 'USDA FoodData Central') + '">' + f.fonte + '</span>' : '<span class="tag est" title="Estimativa média">estimado</span>';
+        return '<tr title="' + esc(f.dica || '') + '"><td>' + fname(f, D.GRUPOS[f.grupo] + ' · ' + src) + '</td>' +
           '<td class="num">×' + n1(f.rend) + (f.rend > 1 ? '<div class="muted">1 kg → ' + n1(f.rend) + ' kg</div>' : '') + '</td>' +
           '<td class="num">' + n0(f.kcal / (f.rend || 1)) + '</td>' +
           '<td class="num"><input type="number" min="0" step="1" value="' + f.porcao + '" data-act="porcao" data-id="' + f.id + '" style="width:80px">' +
           (ov !== undefined ? ' <button class="btn del" data-act="reset-porcao" data-id="' + f.id + '" title="Restaurar padrão">↺</button>' : '') + '</td>' +
           '<td class="num">' + f.val + ' m</td></tr>';
       }).join('') + '</tbody></table></div></div>';
-    h += '<div class="card"><h3>Adicionar alimento</h3><form class="form" data-form="custom">' +
+    h += '<p class="muted">Fontes: <b>TACO</b> = Tabela Brasileira de Composição de Alimentos (UNICAMP); <b>USDA</b> = USDA FoodData Central; <b>estimado</b> = média de rótulos. Rendimento, porção, tempo de cozimento e validade são estimativas médias.</p>' +
+      '<div class="card"><h3>Adicionar alimento</h3><form class="form" data-form="custom">' +
       '<div><label>Nome</label><input name="nome" required maxlength="50"></div>' +
       '<div><label>Grupo</label><select name="grupo">' + Object.keys(D.GRUPOS).map(function (g) { return '<option value="' + g + '">' + D.GRUPOS[g] + '</option>'; }).join('') + '</select></div>' +
       '<div><label>Unidade</label><select name="un"><option value="kg">kg</option><option value="l">litro</option><option value="un">unidade</option></select></div>' +
@@ -293,7 +339,8 @@
 
   /* ---------------- EVENTOS ---------------- */
   document.addEventListener('click', function (e) {
-    var t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
+    var t = e.target.closest('[data-tab],[data-act],[data-modo]'); if (!t) return;
+    if (t.dataset.modo) { state.modo = t.dataset.modo; save(); render(); return; }
     if (t.dataset.tab) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
     var act = t.dataset.act, id = t.dataset.id;
     if (act === 'del-pessoa') { state.pessoas = state.pessoas.filter(function (p) { return p.id !== id; }); save(); render(); }
@@ -309,7 +356,6 @@
 
   document.addEventListener('change', function (e) {
     var t = e.target;
-    if (t.id === 'modo') { state.modo = t.value; save(); render(); return; }
     if (t.id === 'foodSel') { updateFoodHint(); return; }
     var act = t.dataset && t.dataset.act; if (!act) return;
     if (act === 'qtd') { var s = find(state.estoque, t.dataset.id); if (s) { s.qtd = Math.max(0, Number(t.value) || 0); save(); render(); } }

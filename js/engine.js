@@ -95,7 +95,7 @@
       var perDay = h.n ? dailyRawKg(f, h) : 0;
       var days = perDay > 0 ? a.kg / perDay : HUGE;
       if (f.porcao > 0 && perDay > 0) { cookMin += perDay * f.coc; cookWater += perDay * f.agua; }
-      return { food: f, kg: a.kg, cozidoKg: a.kg * (f.rend || 1), kcal: kcal, prot: prot,
+      return { food: f, kg: a.kg, cozidoKg: a.kg * (f.rend || 1), kcal: kcal, prot: prot, gord: gord, carb: carb,
                porDiaKg: perDay, dias: days };
     });
     items.sort(function (x, y) { return x.dias - y.dias; });
@@ -128,7 +128,21 @@
       carb: tot.carb * 4 / kcalMacro * 100, prot: tot.prot * 4 / kcalMacro * 100, gord: tot.gord * 9 / kcalMacro * 100
     } : { carb: 0, prot: 0, gord: 0 };
 
-    return { modo: mode, h: h, items: items, tot: tot, grupos: grupos, dias: dias, macros: macros,
+    // necessidade diária por macronutriente: proteína pelo perfil; gordura ~28% e carboidrato o restante das calorias
+    var needProt = h.prot, needGord = h.kcal * 0.28 / 9;
+    var needCarb = Math.max(0, (h.kcal - needProt * 4 - needGord * 9) / 4);
+    function fontes(campo) {
+      var total = tot[campo] || 0;
+      return items.filter(function (i) { return i[campo] > 0; })
+        .sort(function (x, y) { return y[campo] - x[campo]; }).slice(0, 3)
+        .map(function (i) { return { food: i.food, g: i[campo], pct: total ? i[campo] / total * 100 : 0 }; });
+    }
+    var macro = {
+      carb: { tem: tot.carb, precisa: needCarb, dias: needCarb > 0 ? tot.carb / needCarb : HUGE, fontes: fontes('carb') },
+      prot: { tem: tot.prot, precisa: needProt, dias: needProt > 0 ? tot.prot / needProt : HUGE, fontes: fontes('prot') },
+      gord: { tem: tot.gord, precisa: needGord, dias: needGord > 0 ? tot.gord / needGord : HUGE, fontes: fontes('gord') }
+    };
+    return { modo: mode, h: h, macro: macro, items: items, tot: tot, grupos: grupos, dias: dias, macros: macros,
              alertas: alertas, gasDia: gasDay, aguaDia: aguaDia, cookMin: cookMin, foods: foods, fm: fm };
   }
 
