@@ -519,7 +519,7 @@
     var foods = catList(), vis = foods.slice(0, cat.n);
     var rows = vis.map(function (f) {
       var ov = state.porcoes[f.id];
-      var src = f.fonte ? '<span class="tag src" title="' + (f.fonte === 'TACO' ? 'Valor da Tabela TACO (UNICAMP)' : f.fonte === 'Rótulo' ? 'Valor tirado do rótulo do fabricante' : 'Valor conferido na USDA FoodData Central') + '">' + f.fonte + '</span>' : '<span class="tag est" title="Estimativa de referência, ainda não conferida em tabela">estimado</span>';
+      var src = f.fonte ? '<span class="tag src" title="' + ({ TACO: 'Valor da Tabela TACO (UNICAMP)', 'Rótulo': 'Valor tirado do rótulo do fabricante', USDA: 'Valor da USDA FoodData Central', 'Sem calorias': 'Item sem calorias nem nutrientes relevantes' }[f.fonte] || '') + '">' + f.fonte + '</span>' : '<span class="tag est" title="Estimativa de referência: não achei este item na TACO nem na USDA">estimado</span>';
       return '<tr title="' + esc(f.dica || '') + '"><td>' + fname(f, D.GRUPOS[f.grupo] + ' · ' + src) + '</td>' +
         '<td class="num">×' + n1(f.rend) + (f.rend > 1 ? '<div class="muted">1 kg → ' + n1(f.rend) + ' kg</div>' : '') + '</td>' +
         '<td class="num">' + n0(f.kcal / (f.rend || 1)) + '</td>' +
