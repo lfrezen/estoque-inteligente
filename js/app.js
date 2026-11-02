@@ -5,7 +5,7 @@
 
   var DEFAULT = {
     versao: 1, modo: 'normal', metaDias: 90, pessoas: [], estoque: [], meds: [], custom: [], porcoes: {},
-    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, atualizado: null, gastos: [], orcamento: 0, drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
+    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, validadeJanela: 30, atualizado: null, gastos: [], orcamento: 0, drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
   };
   var state = load();
   var tab = 'painel';
@@ -72,6 +72,7 @@
     var pct = isFinite(d.energia) ? Math.min(100, d.energia / meta * 100) : 100;
     var c = cls(d.energia, meta), R = 70, C = 2 * Math.PI * R;
     var veredito = d.energia >= meta ? 'Meta atingida em calorias 🎉' : d.energia >= meta / 3 ? 'Já tem uma boa base. Ainda falta chegar à meta.' : 'Estoque curto para a meta. Veja a aba Compras.';
+    h += validadeAvisoHtml(an);
     h += backupAvisoHtml();
     h += '<div class="card hero"><div class="ring ' + c + '" role="img" aria-label="' + n0(pct) + '% da meta">' +
       '<svg viewBox="0 0 168 168"><circle class="trk" cx="84" cy="84" r="' + R + '" fill="none" stroke-width="14"/>' +
@@ -770,6 +771,40 @@
     return h;
   }
 
+  /* ---------------- AVISO DE VALIDADE NO PAINEL ---------------- */
+  function validadeAviso(an) {
+    var W = Math.max(1, Number(state.validadeJanela) || 30), hoje = new Date(), h0 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()), itens = [];
+    an.alertas.forEach(function (a) {
+      var dias = Math.round((new Date(a.linha.validade + 'T00:00:00') - h0) / 86400000);
+      var antes = dias >= 0 && isFinite(a.consumo) && a.consumo !== undefined && dias < a.consumo;
+      if (dias < 0 || dias <= W)
+        itens.push({ tipo: 'alimento', nome: a.food.nome.replace(/ \(.*\)/, ''), dias: dias, antes: antes, qtd: n1(a.linha.qtd) + ' ' + ({ kg: 'kg', l: 'L', un: 'un' }[a.food.un] || '') });
+    });
+    (state.meds || []).forEach(function (m) {
+      var av = M.avaliar(m, hoje); if (av.dias === null) return;
+      if (av.dias < 0 || av.dias <= W) itens.push({ tipo: 'medicamento', nome: m.nome, dias: av.dias });
+    });
+    itens.sort(function (a, b) { return a.dias - b.dias; });
+    return { itens: itens, W: W, vencidos: itens.filter(function (x) { return x.dias < 0; }).length, proximos: itens.filter(function (x) { return x.dias >= 0; }).length,
+             nA: itens.filter(function (x) { return x.tipo === 'alimento'; }).length, nM: itens.filter(function (x) { return x.tipo === 'medicamento'; }).length };
+  }
+  function validadeAvisoHtml(an) {
+    var v = validadeAviso(an); if (!v.itens.length) return '';
+    if (state.avisoValidadeAte && new Date(state.avisoValidadeAte).getTime() > Date.now()) return '';
+    var resumo = [];
+    if (v.vencidos) resumo.push('⛔ ' + v.vencidos + ' vencido(s)');
+    if (v.proximos) resumo.push('⏳ ' + v.proximos + ' vence(m) em até ' + v.W + ' dias');
+    var quando = function (d) { return d < 0 ? 'vencido há ' + Math.abs(d) + (Math.abs(d) === 1 ? ' dia' : ' dias') : d === 0 ? 'vence hoje' : d === 1 ? 'vence amanhã' : 'vence em ' + d + ' dias'; };
+    var lista = v.itens.slice(0, 6).map(function (x) {
+      return '<div style="margin-top:3px">' + (x.tipo === 'medicamento' ? '💊' : '🥫') + ' <strong>' + esc(x.nome) + '</strong>' + (x.qtd ? ' <span class="muted">(' + x.qtd + ')</span>' : '') + ' · ' +
+        '<span style="color:' + (x.dias < 0 ? 'var(--bad)' : x.dias <= 7 ? 'var(--warn)' : 'inherit') + '">' + quando(x.dias) + '</span>' + (x.antes && x.dias >= 0 ? ' <span class="muted">· dura mais que a validade: consuma primeiro</span>' : '') + '</div>';
+    }).join('') + (v.itens.length > 6 ? '<div class="muted" style="margin-top:3px">… e mais ' + (v.itens.length - 6) + '.</div>' : '');
+    var botoes = (v.nA ? '<button class="btn sec" type="button" data-tab="estoque">Ver estoque</button>' : '') + (v.nM ? '<button class="btn sec" type="button" data-tab="meds">Ver medicamentos</button>' : '') +
+      '<button class="btn sec" type="button" data-act="validade-dispensar" title="Esconder por 1 dia">Depois</button>';
+    return '<div class="sug ' + (v.vencidos ? 'alto' : 'medio') + '" id="avisoValidade"><span class="ic" aria-hidden="true">📅</span><div style="flex:1"><b>Validade</b>' + resumo.join(' · ') +
+      ' <span class="muted">(' + (v.nA ? v.nA + ' alimento(s)' : '') + (v.nA && v.nM ? ' e ' : '') + (v.nM ? v.nM + ' medicamento(s)' : '') + ')</span>' + lista + '</div><div class="flex" style="align-self:center">' + botoes + '</div></div>';
+  }
+
   /* ---------------- AVISO DE BACKUP NO PAINEL ---------------- */
   function backupAviso() {
     var d = dr(), tem = (state.pessoas || []).length + (state.estoque || []).length + (state.meds || []).length;
@@ -882,6 +917,7 @@
       '<div><label>Água armazenada (litros)</label><input type="number" min="0" step="any" value="' + state.aguaL + '" data-act="cfg" data-k="aguaL"></div>' +
       '<div><label>Água de higiene (L/pessoa/dia)</label><input type="number" min="0" step="any" value="' + state.aguaHigiene + '" data-act="cfg" data-k="aguaHigiene"></div>' +
       '<div><label>Gás armazenado (kg)</label><input type="number" min="0" step="any" value="' + state.gasKg + '" data-act="cfg" data-k="gasKg"></div>' +
+      '<div><label>Avisar vencimentos com (dias)</label><input type="number" min="1" max="365" step="1" value="' + (Number(state.validadeJanela) || 30) + '" data-act="cfg" data-k="validadeJanela"></div>' +
       '<div><label>Consumo do fogão (kg/h)</label><input type="number" min="0.05" step="0.05" value="' + state.fogaoKgH + '" data-act="cfg" data-k="fogaoKgH"></div></div>' +
       '<p class="muted">Botijão de 13 kg equivale a 13 kg de gás. Um queimador comum consome cerca de 0,2 kg/h. A estimativa de gás considera apenas o tempo de fogo dos alimentos que exigem cozimento.</p></div>';
     h += driveCard();
@@ -911,6 +947,7 @@
     else if (act === 'fin-sel') { finMes = t.dataset.m; render(); }
     else if (act === 'fin-del') { if (confirm('Apagar este gasto do histórico?')) { state.gastos = gs().filter(function (x) { return x.id !== id; }); save(); render(); } }
     else if (act === 'fin-csv') baixarCsv();
+    else if (act === 'validade-dispensar') { state.avisoValidadeAte = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
     else if (act === 'backup-dispensar') { state.avisoBackupAte = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
     else if (act === 'drive-conectar') driveConectar();
     else if (act === 'drive-backup') driveBackup(false);

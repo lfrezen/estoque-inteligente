@@ -208,9 +208,9 @@ details.area summary::-webkit-details-marker { display: none; }
 .rel-t.plan td { height: 11mm; vertical-align: top; }
 
 /* Aviso de backup no Painel */
-#avisoBackup { flex-wrap: wrap; margin-bottom: 16px; }
-#avisoBackup > div:nth-child(2) { flex: 1 1 220px; min-width: 0; }
-@media (max-width: 560px) { #avisoBackup > .flex { flex: 0 0 100%; padding-left: 34px; } }
+#avisoBackup, #avisoValidade { flex-wrap: wrap; margin-bottom: 16px; }
+#avisoBackup > div:nth-child(2), #avisoValidade > div:nth-child(2) { flex: 1 1 220px; min-width: 0; }
+@media (max-width: 560px) { #avisoBackup > .flex, #avisoValidade > .flex { flex: 0 0 100%; padding-left: 34px; } }
 
 /* ---------- Ajustes de layout: cabeçalho, menu lateral no desktop, rodapé ---------- */
 :root { --hdr1: #1f5a3e; --hdr2: #2d7a55; }
