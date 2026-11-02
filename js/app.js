@@ -40,7 +40,7 @@
 
   var TABS = [
     ['painel', '📊 Painel'], ['pessoas', '👨‍👩‍👧 Pessoas'], ['estoque', '📦 Estoque'], ['compras', '🛒 Compras'],
-    ['cardapio', '🍽️ Cardápio'], ['estrategias', '💡 Estratégias'], ['catalogo', '📖 Catálogo'], ['config', '⚙️ Config e backup']
+    ['cardapio', '🍽️ Cardápio'], ['estrategias', '💡 Estratégias'], ['catalogo', '📖 Catálogo'], ['relatorio', '🖨️ Relatório'], ['config', '⚙️ Config e backup']
   ];
 
   function renderChrome() {
@@ -55,7 +55,7 @@
   function render() {
     renderChrome();
     var v = document.getElementById('view');
-    var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, compras: vCompras, cardapio: vCardapio,
+    var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, compras: vCompras, cardapio: vCardapio, relatorio: vRelatorio,
       estrategias: vEstrategias, catalogo: vCatalogo, config: vConfig }[tab];
     v.innerHTML = fn();
   }
@@ -350,6 +350,87 @@
     return h;
   }
 
+  /* ---------------- RELATÓRIO PARA IMPRIMIR ---------------- */
+  var rel = { caixas: 14, cardapio: true, calendario: true };
+  function p2(n) { return ('0' + n).slice(-2); }
+  function fmtData(d) { return p2(d.getDate()) + '/' + p2(d.getMonth() + 1); }
+  function fmtDataL(d) { return fmtData(d) + '/' + d.getFullYear(); }
+  function addDias(d, n) { var x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
+  function relQty(f, g) { return f.id === 'vitamina' || f.id === 'vitamina_c' ? n0(g) + ' comp.' : f.id === 'leite_po' ? n0(g) + ' ml' : n0(g) + ' g'; }
+
+  function vRelatorio() {
+    var an = E.analyze(state), meta = state.metaDias, hoje = new Date(), d = an.dias;
+    var h = '<div class="no-print"><h2>Relatório para imprimir</h2>' +
+      '<p class="muted">Folhas em A4 <b>paisagem</b> para fixar na geladeira e acompanhar o uso sem energia nem internet: controle da despensa, cardápio da semana e calendário de dias. No diálogo de impressão escolha <b>Orientação: Paisagem</b> e desmarque "Cabeçalhos e rodapés". Para guardar em arquivo, escolha "Salvar como PDF".</p>' +
+      '<div class="card"><div class="form">' +
+      '<div><label for="relCx">Caixinhas de uso por alimento</label><select id="relCx" data-act="rel-opt" data-k="caixas">' +
+      [7, 14, 21, 30].map(function (n) { return '<option value="' + n + '"' + (rel.caixas === n ? ' selected' : '') + '>' + n + ' dias</option>'; }).join('') + '</select></div>' +
+      '<div><label><input type="checkbox" data-act="rel-opt" data-k="cardapio"' + (rel.cardapio ? ' checked' : '') + ' style="width:auto"> Incluir cardápio de 7 dias</label>' +
+      '<label><input type="checkbox" data-act="rel-opt" data-k="calendario"' + (rel.calendario ? ' checked' : '') + ' style="width:auto"> Incluir calendário de ' + meta + ' dias</label></div>' +
+      '<div><button class="btn" type="button" data-act="imprimir">🖨️ Imprimir / salvar PDF</button></div></div></div></div>';
+    if (!an.h.n || !an.items.length) return h + '<div class="empty no-print"><big>🖨️</big>Cadastre pessoas e estoque para gerar o relatório.</div>';
+
+    // agrega o estoque por alimento: unidades, validade mais próxima
+    var agg = {};
+    state.estoque.forEach(function (s) {
+      var a = agg[s.foodId] || (agg[s.foodId] = { un: 0, venc: '' });
+      a.un += Number(s.qtd) || 0;
+      if (s.validade && (!a.venc || s.validade < a.venc)) a.venc = s.validade;
+    });
+    var order = Object.keys(D.GRUPOS);
+    var items = an.items.slice().sort(function (a, b) {
+      return order.indexOf(a.food.grupo) - order.indexOf(b.food.grupo) || a.food.nome.localeCompare(b.food.nome, 'pt-BR');
+    });
+    function ate(dd) { return isFinite(dd) ? 'até ' + fmtData(addDias(hoje, Math.floor(dd))) : ''; }
+    var kpi4 = function (ic, l, v, sub) { return '<div class="rk"><div class="rl">' + ic + ' ' + l + '</div><div class="rv">' + v + '</div><div class="rs">' + sub + '</div></div>'; };
+
+    var caixas = ''; for (var i = 1; i <= rel.caixas; i++) caixas += '<i class="box">' + i + '</i>';
+    var lastG = '', rows = '';
+    items.forEach(function (it) {
+      var f = it.food, a = agg[f.id] || { un: 0, venc: '' };
+      if (f.grupo !== lastG) { if (lastG) rows += '</tbody>'; lastG = f.grupo; rows += '<tbody class="g"><tr class="grp"><td colspan="7">' + (GEMOJI[f.grupo] || '') + ' ' + D.GRUPOS[f.grupo] + '</td></tr>'; }
+      var est = f.un === 'un' ? n0(a.un) + ' un × ' + n0(it.kg * 1000 / (a.un || 1)) + ' g' : f.un === 'l' ? n1(a.un) + ' L' : n1(it.kg) + ' kg';
+      var cozido = it.porDiaKg * 1000 * (f.rend || 1);
+      var racao = it.porDiaKg > 0 ? '<b>' + relQty(f, cozido) + '</b>' + (f.rend > 1 ? '<small> pronto<br>(cru ' + n0(it.porDiaKg * 1000) + ' g)</small>' : '') : '<span class="muted">sem porção</span>';
+      var dura = it.porDiaKg > 0 ? '<b>' + (it.dias >= 100 ? n0(it.dias) : n1(it.dias)) + ' dias</b><br><small>' + ate(it.dias) + '</small>' : '—';
+      var venc = a.venc ? fmtDataL(new Date(a.venc + 'T00:00:00')) : '—';
+      rows += '<tr><td>' + esc(f.nome) + '</td><td class="c">' + est + '</td><td class="c">' + racao + '</td><td class="c">' + dura + '</td><td class="c">' + venc + '</td><td class="bx">' + caixas + '</td><td class="rest"></td></tr>';
+    });
+
+    h += '<section class="rel-sheet"><div class="rel-head"><div><h1>🥫 Controle da despensa</h1><div class="rs">Gerado em ' + fmtDataL(hoje) + ' · ' + an.h.n + ' pessoa(s) · modo <b>' + D.MODOS[state.modo].nome + '</b> · meta ' + meta + ' dias · ' + n0(an.h.kcal) + ' kcal/dia</div></div>' +
+      '<div class="rel-kpis">' + kpi4('🔥', 'Energia', dias(d.energia), ate(d.energia)) + kpi4('💪', 'Proteína', dias(d.proteina), ate(d.proteina)) +
+      kpi4('💧', 'Água', state.aguaL > 0 ? dias(d.agua) : 'informar', state.aguaL > 0 ? n0(state.aguaL) + ' L · ' + n1(an.aguaDia) + ' L/dia' : 'precisa ' + n1(an.aguaDia) + ' L/dia') +
+      kpi4('🧯', 'Gás', state.gasKg > 0 ? dias(d.gas) : 'informar', state.gasKg > 0 ? n1(state.gasKg) + ' kg' : '') + '</div></div>' +
+      '<table class="rel-t"><thead><tr><th style="width:19%">Alimento</th><th style="width:10%">Estoque inicial</th><th style="width:11%">Ração por dia (casa)</th><th style="width:9%">Dura</th><th style="width:8%">Vence</th><th>Uso diário (marque ✓ a cada dia)</th><th style="width:9%">Restante</th></tr></thead>' + rows + '</tbody></table>' +
+      '<div class="rel-foot">💧 Água restante: ______ L &nbsp;&nbsp; 🧯 Gás restante: ______ kg &nbsp;&nbsp; Atualize o app quando houver energia e internet. Ração = quanto da comida pronta a casa toda deve comer por dia neste modo.</div></section>';
+
+    if (rel.cardapio) {
+      var cd = E.cardapio(state, an, 7), nomes = ['Café', 'Almoço', 'Jantar', 'Lanche'];
+      h += '<section class="rel-sheet"><div class="rel-head"><div><h1>🍽️ Cardápio da semana</h1><div class="rs">Quantidades <b>prontas para comer</b>, para a casa toda, no modo ' + D.MODOS[state.modo].nome + '. Usa só o que está no estoque.</div></div></div>' +
+        '<table class="rel-t menu"><thead><tr><th style="width:8%"></th>' + cd.map(function (x) { return '<th>Dia ' + x.dia + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        nomes.map(function (nm, mi) {
+          return '<tr><th>' + nm + '</th>' + cd.map(function (x) {
+            var r = x.refeicoes[mi];
+            return '<td>' + (r && r.itens.length ? r.itens.map(function (i) { return esc(i.food.nome.replace(/ \(.*\)/, '')) + ' <b>' + relQty(i.food, i.g) + '</b>'; }).join('<br>') : '—') + '</td>';
+          }).join('') + '</tr>';
+        }).join('') + '</tbody></table>' +
+        '<div class="rel-foot">Troque alimentos do mesmo grupo à vontade (feijão por lentilha, atum por sardinha). Gaste primeiro o que tem validade mais curta.</div></section>';
+    }
+
+    if (rel.calendario) {
+      var dE = Math.floor(d.energia), dP = Math.floor(d.proteina), dA = state.aguaL > 0 ? Math.floor(d.agua) : Infinity, dG = state.gasKg > 0 ? Math.floor(d.gas) : Infinity;
+      var cells = '';
+      for (var k = 1; k <= meta; k++) {
+        var tags = [];
+        if (k === dE) tags.push('🔥 acaba energia'); if (k === dP) tags.push('💪 acaba proteína');
+        if (k === dA) tags.push('💧 acaba água'); if (k === dG) tags.push('🧯 acaba gás');
+        cells += '<div class="cal' + (k > dE ? ' sem' : '') + (tags.length ? ' marca' : '') + '"><b>' + k + '</b><span>' + fmtData(addDias(hoje, k - 1)) + '</span><i class="box big"></i>' + (tags.length ? '<em>' + tags.join('<br>') + '</em>' : '') + '</div>';
+      }
+      h += '<section class="rel-sheet"><div class="rel-head"><div><h1>📅 Calendário de ' + meta + ' dias</h1><div class="rs">Risque um dia ao terminar. Dias em cinza (hachurados) não têm calorias previstas no estoque atual' + (isFinite(d.energia) ? ': a energia dura cerca de <b>' + dias(d.energia) + '</b>.' : '.') + '</div></div></div><div class="cal-grid">' + cells + '</div></section>';
+    }
+    return h;
+  }
+
   /* ---------------- CONFIG ---------------- */
   function vConfig() {
     var h = '<h2>Configurações</h2><div class="card"><div class="form">' +
@@ -378,6 +459,7 @@
     else if (act === 'reset-porcao') { delete state.porcoes[id]; save(); render(); }
     else if (act === 'cat-mais') { cat.n += 80; catRefresh(); }
     else if (act === 'novo-alimento') { prefillNome = t.dataset.nome || ''; tab = 'catalogo'; render(); var f = document.getElementById('novoNome'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); } }
+    else if (act === 'imprimir') window.print();
     else if (act === 'export') exportar();
     else if (act === 'reset') {
       if (confirm('Apagar TODOS os dados deste navegador? Esta ação não pode ser desfeita.')) {
@@ -389,6 +471,7 @@
   document.addEventListener('change', function (e) {
     var t = e.target;
     var act = t.dataset && t.dataset.act; if (!act) return;
+    if (act === 'rel-opt') { var k = t.dataset.k; rel[k] = k === 'caixas' ? Number(t.value) : t.checked; render(); return; }
     if (act === 'pesoUn') { var sp = find(state.estoque, t.dataset.id); if (sp) { sp.pesoUn = Math.max(0, Number(t.value) || 0); save(); render(); } }
     else if (act === 'qtd') { var s = find(state.estoque, t.dataset.id); if (s) { s.qtd = Math.max(0, Number(t.value) || 0); save(); render(); } }
     else if (act === 'validade') { var s2 = find(state.estoque, t.dataset.id); if (s2) { s2.validade = t.value; save(); render(); } }
