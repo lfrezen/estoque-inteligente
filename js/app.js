@@ -54,10 +54,11 @@
   }
 
   function render() {
-    renderChrome();
+    notifCache = notificacoes();
+    renderChrome(); atualizaSino();
     var v = document.getElementById('view');
     var fn = { painel: vPainel, pessoas: vPessoas, estoque: vEstoque, meds: vMeds, pront: vPront, compras: vCompras, financas: vFinancas, cardapio: vCardapio, relatorio: vRelatorio,
-      estrategias: vEstrategias, catalogo: vCatalogo, config: vConfig }[tab];
+      estrategias: vEstrategias, catalogo: vCatalogo, config: vConfig, notificacoes: vNotificacoes }[tab];
     v.innerHTML = fn();
   }
 
@@ -72,8 +73,6 @@
     var pct = isFinite(d.energia) ? Math.min(100, d.energia / meta * 100) : 100;
     var c = cls(d.energia, meta), R = 70, C = 2 * Math.PI * R;
     var veredito = d.energia >= meta ? 'Meta atingida em calorias 🎉' : d.energia >= meta / 3 ? 'Já tem uma boa base. Ainda falta chegar à meta.' : 'Estoque curto para a meta. Veja a aba Compras.';
-    h += validadeAvisoHtml(an);
-    h += backupAvisoHtml();
     h += '<div class="card hero"><div class="ring ' + c + '" role="img" aria-label="' + n0(pct) + '% da meta">' +
       '<svg viewBox="0 0 168 168"><circle class="trk" cx="84" cy="84" r="' + R + '" fill="none" stroke-width="14"/>' +
       '<circle class="val" cx="84" cy="84" r="' + R + '" fill="none" stroke-width="14" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - pct / 100)).toFixed(1) + '"/></svg>' +
@@ -146,15 +145,6 @@
       (mr.total ? '<p>' + mr.total + ' item(ns) · <b' + (mr.vencidos ? ' style="color:var(--bad)"' : '') + '>' + mr.vencidos + ' vencido(s)</b> · ' + mr.atencao + ' vencem em 90 dias · kit essencial ' + mr.essenciaisOk + ' de ' + mr.essenciais + (mr.continuoMin !== null ? ' · uso contínuo dura <b>' + dias(mr.continuoMin) + '</b>' : '') + '.</p>'
         : '<p class="muted">Cadastre seus medicamentos e veja o kit essencial, a validade e dicas para situação extrema.</p>') + '</div>';
 
-    // validade
-    if (an.alertas.length) {
-      h += '<div class="card"><h3>Validade</h3><table><thead><tr><th>Item</th><th>Situação</th></tr></thead><tbody>' +
-        an.alertas.map(function (a) {
-          var txt = a.tipo === 'vencido' ? 'Vencido há ' + Math.abs(a.dias) + ' dia(s)' :
-            a.tipo === 'vence_antes' ? 'Vence em ' + a.dias + ' dia(s), antes de ser consumido (dura ' + dias(a.consumo) + ')' : 'Vence em ' + a.dias + ' dia(s)';
-          return '<tr><td>' + esc(a.food.nome) + '</td><td>' + txt + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
-    }
     return h;
   }
   function kpi(l, v, c, sub, ic) { return '<div class="kpi ' + c + '"><div class="l"><span class="ic" aria-hidden="true">' + (ic || '') + '</span> ' + l + '</div><div class="v">' + v + '</div><div class="l">' + sub + '</div></div>'; }
@@ -771,41 +761,77 @@
     return h;
   }
 
-  /* ---------------- AVISO DE VALIDADE NO PAINEL ---------------- */
-  function validadeAviso(an) {
-    var W = Math.max(1, Number(state.validadeJanela) || 30), hoje = new Date(), h0 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()), itens = [];
+  /* ---------------- CENTRAL DE NOTIFICAÇÕES ---------------- */
+  var NOTIF_CATS = { validade: { nome: 'Validade', ic: '📅' }, saude: { nome: 'Medicamentos', ic: '💊' }, backup: { nome: 'Backup', ic: '☁️' }, financas: { nome: 'Finanças', ic: '💰' }, prontidao: { nome: 'Prontidão', ic: '🧟' } };
+  var NIVEL_ORD = { alto: 0, medio: 1, info: 2 };
+  var notifCache = [];
+  function quandoDias(d) { return d < 0 ? 'vencido há ' + Math.abs(d) + (Math.abs(d) === 1 ? ' dia' : ' dias') : d === 0 ? 'vence hoje' : d === 1 ? 'vence amanhã' : 'vence em ' + d + ' dias'; }
+  function notificacoes() {
+    var an = E.analyze(state), hoje = new Date(), h0 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()), W = Math.max(1, Number(state.validadeJanela) || 30), out = [], off = state.notifOff || {};
+    // validade dos alimentos
     an.alertas.forEach(function (a) {
       var dias = Math.round((new Date(a.linha.validade + 'T00:00:00') - h0) / 86400000);
+      if (!(dias < 0 || dias <= W)) return;
       var antes = dias >= 0 && isFinite(a.consumo) && a.consumo !== undefined && dias < a.consumo;
-      if (dias < 0 || dias <= W)
-        itens.push({ tipo: 'alimento', nome: a.food.nome.replace(/ \(.*\)/, ''), dias: dias, antes: antes, qtd: n1(a.linha.qtd) + ' ' + ({ kg: 'kg', l: 'L', un: 'un' }[a.food.un] || '') });
+      out.push({ id: 'val:a:' + a.linha.id, cat: 'validade', nivel: dias < 0 ? 'alto' : dias <= 7 ? 'medio' : 'info', ic: dias < 0 ? '⛔' : '⏳', ordem: dias,
+        titulo: a.food.nome.replace(/ \(.*\)/, '') + ' (' + n1(a.linha.qtd) + ' ' + ({ kg: 'kg', l: 'L', un: 'un' }[a.food.un] || '') + ')',
+        txt: quandoDias(dias) + (antes ? '. O estoque dura mais que a validade: consuma primeiro.' : '.'), acao: ['Ver estoque', 'tab', 'estoque'] });
     });
+    // validade e reposição dos medicamentos
     (state.meds || []).forEach(function (m) {
-      var av = M.avaliar(m, hoje); if (av.dias === null) return;
-      if (av.dias < 0 || av.dias <= W) itens.push({ tipo: 'medicamento', nome: m.nome, dias: av.dias });
+      var av = M.avaliar(m, hoje);
+      if (av.dias !== null && (av.dias < 0 || av.dias <= W))
+        out.push({ id: 'val:m:' + m.id, cat: 'validade', nivel: av.dias < 0 ? 'alto' : av.dias <= 7 ? 'medio' : 'info', ic: av.dias < 0 ? '⛔' : '⏳', ordem: av.dias, titulo: m.nome + ' (medicamento)',
+          txt: quandoDias(av.dias) + (av.dias < 0 ? '. ' + NIVEL_TXT[av.nivel] + '.' : '.'), acao: ['Ver medicamentos', 'tab', 'meds'] });
+      var du = M.duracao(m);
+      if (du !== null && du < 15)
+        out.push({ id: 'saude:rep:' + m.id, cat: 'saude', nivel: du < 7 ? 'alto' : 'medio', ic: '🔁', ordem: du, titulo: 'Reposição: ' + m.nome, txt: 'A reserva de uso contínuo dura cerca de ' + dias(du) + '. Peça a receita e reponha.', acao: ['Ver medicamentos', 'tab', 'meds'] });
     });
-    itens.sort(function (a, b) { return a.dias - b.dias; });
-    return { itens: itens, W: W, vencidos: itens.filter(function (x) { return x.dias < 0; }).length, proximos: itens.filter(function (x) { return x.dias >= 0; }).length,
-             nA: itens.filter(function (x) { return x.tipo === 'alimento'; }).length, nM: itens.filter(function (x) { return x.tipo === 'medicamento'; }).length };
+    // backup
+    var b = backupAviso();
+    if (b && b.nivel !== 'ok') out.push({ id: 'backup', cat: 'backup', nivel: b.nivel, ic: b.ic, ordem: -1, titulo: 'Backup', txt: b.txt, acao: b.btn });
+    // revisão do kit de emergência
+    var dr0 = PRONT.diasDesdeRevisao(state, hoje);
+    if (dr0 !== null && dr0 > 180) out.push({ id: 'pront:rev', cat: 'prontidao', nivel: 'medio', ic: '🔁', ordem: 0, titulo: 'Revisão do kit de emergência', txt: 'A última revisão foi há ' + dr0 + ' dias. Confira validades, pilhas, água e a mochila de fuga.', acao: ['Abrir Prontidão', 'tab', 'pront'] });
+    // orçamento do mês
+    var orc = Number(state.orcamento) || 0;
+    if (orc > 0) {
+      var tot = FIN.total(gs(), FIN.mesAtual(hoje));
+      if (tot > orc * 0.8) out.push({ id: 'fin:orc:' + FIN.mesAtual(hoje) + (tot > orc ? ':estourou' : ''), cat: 'financas', nivel: tot > orc ? 'alto' : 'medio', ic: '🎯', ordem: 0, titulo: tot > orc ? 'Orçamento do mês estourado' : 'Orçamento do mês quase no limite',
+        txt: 'Você gastou ' + FIN.brl(tot) + ' de ' + FIN.brl(orc) + ' (' + n0(tot / orc * 100) + '%).', acao: ['Ver finanças', 'tab', 'financas'] });
+    }
+    out = out.filter(function (n) { return !off[n.cat]; });
+    out.sort(function (x, y) { return NIVEL_ORD[x.nivel] - NIVEL_ORD[y.nivel] || x.ordem - y.ordem; });
+    return out;
   }
-  function validadeAvisoHtml(an) {
-    var v = validadeAviso(an); if (!v.itens.length) return '';
-    if (state.avisoValidadeAte && new Date(state.avisoValidadeAte).getTime() > Date.now()) return '';
-    var resumo = [];
-    if (v.vencidos) resumo.push('⛔ ' + v.vencidos + ' vencido(s)');
-    if (v.proximos) resumo.push('⏳ ' + v.proximos + ' vence(m) em até ' + v.W + ' dias');
-    var quando = function (d) { return d < 0 ? 'vencido há ' + Math.abs(d) + (Math.abs(d) === 1 ? ' dia' : ' dias') : d === 0 ? 'vence hoje' : d === 1 ? 'vence amanhã' : 'vence em ' + d + ' dias'; };
-    var lista = v.itens.slice(0, 6).map(function (x) {
-      return '<div style="margin-top:3px">' + (x.tipo === 'medicamento' ? '💊' : '🥫') + ' <strong>' + esc(x.nome) + '</strong>' + (x.qtd ? ' <span class="muted">(' + x.qtd + ')</span>' : '') + ' · ' +
-        '<span style="color:' + (x.dias < 0 ? 'var(--bad)' : x.dias <= 7 ? 'var(--warn)' : 'inherit') + '">' + quando(x.dias) + '</span>' + (x.antes && x.dias >= 0 ? ' <span class="muted">· dura mais que a validade: consuma primeiro</span>' : '') + '</div>';
-    }).join('') + (v.itens.length > 6 ? '<div class="muted" style="margin-top:3px">… e mais ' + (v.itens.length - 6) + '.</div>' : '');
-    var botoes = (v.nA ? '<button class="btn sec" type="button" data-tab="estoque">Ver estoque</button>' : '') + (v.nM ? '<button class="btn sec" type="button" data-tab="meds">Ver medicamentos</button>' : '') +
-      '<button class="btn sec" type="button" data-act="validade-dispensar" title="Esconder por 1 dia">Depois</button>';
-    return '<div class="sug ' + (v.vencidos ? 'alto' : 'medio') + '" id="avisoValidade"><span class="ic" aria-hidden="true">📅</span><div style="flex:1"><b>Validade</b>' + resumo.join(' · ') +
-      ' <span class="muted">(' + (v.nA ? v.nA + ' alimento(s)' : '') + (v.nA && v.nM ? ' e ' : '') + (v.nM ? v.nM + ' medicamento(s)' : '') + ')</span>' + lista + '</div><div class="flex" style="align-self:center">' + botoes + '</div></div>';
+  function adiada(n) { var t = state.notifAdiar && state.notifAdiar[n.id]; return !!t && new Date(t).getTime() > Date.now(); }
+  function notifBtn(a) { return a ? '<button class="btn sec" type="button" data-' + (a[1] === 'tab' ? 'tab' : 'act') + '="' + a[2] + '">' + esc(a[0]) + '</button>' : ''; }
+  function vNotificacoes() {
+    var N = notifCache, ativas = N.filter(function (n) { return !adiada(n); }), adiadas = N.filter(adiada), h = '<h2>🔔 Notificações</h2>';
+    if (!ativas.length) h += '<div class="empty"><big>✅</big>Tudo em dia. Nenhum aviso no momento.</div>';
+    else {
+      h += '<div class="flex between" style="margin-bottom:10px"><span class="muted">' + ativas.length + ' aviso(s)</span><button class="btn sec" type="button" data-act="notif-adiar-todas">Adiar todos por 1 dia</button></div>';
+      h += ativas.map(function (n) {
+        return '<div class="sug ' + n.nivel + ' notif"><span class="ic" aria-hidden="true">' + n.ic + '</span><div style="flex:1;min-width:0"><b>' + esc(n.titulo) + '</b>' + esc(n.txt) +
+          ' <span class="tag est">' + NOTIF_CATS[n.cat].ic + ' ' + NOTIF_CATS[n.cat].nome + '</span></div><div class="flex">' + notifBtn(n.acao) + '<button class="btn sec" type="button" data-act="notif-adiar" data-id="' + esc(n.id) + '" title="Esconder por 1 dia">Adiar</button></div></div>';
+      }).join('');
+    }
+    if (adiadas.length) h += '<details class="card area"><summary><span>😴 <b>Adiadas</b></span><span class="muted">' + adiadas.length + '</span></summary>' + adiadas.map(function (n) {
+      return '<div class="flex between" style="padding:6px 0;border-top:1px solid var(--line)"><span>' + n.ic + ' ' + esc(n.titulo) + ' <span class="muted">· volta amanhã</span></span><button class="btn sec" type="button" data-act="notif-reativar" data-id="' + esc(n.id) + '">Reativar</button></div>';
+    }).join('') + '</details>';
+    h += '<details class="card area"><summary><span>⚙️ <b>Quais avisos receber</b></span></summary><div style="margin-top:10px">' + Object.keys(NOTIF_CATS).map(function (k) {
+      return '<label style="display:flex;gap:8px;align-items:center;color:var(--ink);padding:4px 0"><input type="checkbox" data-act="notif-cat" data-k="' + k + '"' + (!(state.notifOff || {})[k] ? ' checked' : '') + ' style="width:auto"> ' + NOTIF_CATS[k].ic + ' ' + NOTIF_CATS[k].nome + '</label>';
+    }).join('') + '<div class="form" style="margin-top:8px"><div><label for="notifJanela">Avisar vencimentos com (dias)</label><input id="notifJanela" type="number" min="1" max="365" step="1" value="' + (Number(state.validadeJanela) || 30) + '" data-act="cfg" data-k="validadeJanela"></div></div></div></details>';
+    return h + '<p class="muted">O app só confere os avisos quando está aberto: ele não envia notificações de celular com o app fechado.</p>';
+  }
+  function atualizaSino() {
+    var bell = document.getElementById('bell'); if (!bell) return;
+    var ativas = notifCache.filter(function (n) { return !adiada(n); }), alto = ativas.some(function (n) { return n.nivel === 'alto'; }), bd = bell.querySelector('.badge');
+    bd.hidden = !ativas.length; bd.textContent = ativas.length > 9 ? '9+' : String(ativas.length); bd.className = 'badge' + (alto ? '' : ' medio');
+    bell.setAttribute('aria-label', 'Notificações' + (ativas.length ? ' (' + ativas.length + ' novas)' : '')); bell.setAttribute('aria-pressed', String(tab === 'notificacoes'));
   }
 
-  /* ---------------- AVISO DE BACKUP NO PAINEL ---------------- */
+  /* ---------------- ESTADO DO BACKUP (usado pelas notificações) ---------------- */
   function backupAviso() {
     var d = dr(), tem = (state.pessoas || []).length + (state.estoque || []).length + (state.meds || []).length;
     if (!tem) return null;
@@ -822,19 +848,11 @@
     if (dias > 7) return { nivel: 'medio', ic: '🕒', txt: 'Seu último backup foi ' + quando(melhor) + '. Vale fazer um novo.', btn: ['Fazer backup', 'tab', 'config'] };
     return { nivel: 'ok', ic: '✅', txt: 'Backup em dia: o último foi ' + quando(melhor) + (ult >= exp ? ' (Google Drive)' : ' (arquivo)') + '.' };
   }
-  function backupAvisoHtml() {
-    var a = backupAviso(); if (!a) return '';
-    if (a.nivel !== 'ok' && !a.urgente && state.avisoBackupAte && new Date(state.avisoBackupAte).getTime() > Date.now()) return '';
-    var btn = a.btn ? '<button class="btn sec" type="button" data-' + (a.btn[1] === 'tab' ? 'tab' : 'act') + '="' + a.btn[2] + '">' + a.btn[0] + '</button>' : '';
-    var dispensar = a.nivel !== 'ok' && !a.urgente ? '<button class="btn sec" type="button" data-act="backup-dispensar" title="Esconder por 1 dia">Depois</button>' : '';
-    return '<div class="sug ' + a.nivel + '" id="avisoBackup"><span class="ic" aria-hidden="true">' + a.ic + '</span><div style="flex:1"><b>Backup</b>' + esc(a.txt) + '</div>' +
-      ((btn || dispensar) ? '<div class="flex" style="align-self:center">' + btn + dispensar + '</div>' : '') + '</div>';
-  }
 
   /* ---------------- BACKUP NO GOOGLE DRIVE ---------------- */
   var driveStatus = { txt: '', tipo: '' }, driveTimer = null, emSync = false, driveOcupado = false;
   function dr() { var d = state.drive || (state.drive = {}); d.clientId = d.clientId || ''; d.auto = !!d.auto; d.ultimo = d.ultimo || ''; d.remotoMod = d.remotoMod || ''; return d; }
-  function driveMsg(txt, tipo) { driveStatus = { txt: txt, tipo: tipo || 'info' }; if (tab === 'config' || tab === 'painel') render(); }
+  function driveMsg(txt, tipo) { driveStatus = { txt: txt, tipo: tipo || 'info' }; if (tab === 'config' || tab === 'notificacoes') render(); }
   function driveErro(e) { driveOcupado = false; var m = { offline: 'Sem internet. Seus dados continuam salvos neste aparelho.' }[e && e.codigo]; driveMsg(m || (e && e.message) || 'Algo deu errado no backup.', 'bad'); }
   function pacote() { var c = JSON.parse(JSON.stringify(state)); delete c.drive; return { app: 'estoque-inteligente', versao: 1, salvoEm: new Date().toISOString(), dados: c }; }
   function fmtHora(iso) { return iso ? new Date(iso).toLocaleString('pt-BR') : ''; }
@@ -947,8 +965,10 @@
     else if (act === 'fin-sel') { finMes = t.dataset.m; render(); }
     else if (act === 'fin-del') { if (confirm('Apagar este gasto do histórico?')) { state.gastos = gs().filter(function (x) { return x.id !== id; }); save(); render(); } }
     else if (act === 'fin-csv') baixarCsv();
-    else if (act === 'validade-dispensar') { state.avisoValidadeAte = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
-    else if (act === 'backup-dispensar') { state.avisoBackupAte = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
+    else if (act === 'notif-abrir') { tab = 'notificacoes'; render(); window.scrollTo(0, 0); }
+    else if (act === 'notif-adiar') { (state.notifAdiar = state.notifAdiar || {})[id] = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
+    else if (act === 'notif-reativar') { if (state.notifAdiar) delete state.notifAdiar[id]; save(); render(); }
+    else if (act === 'notif-adiar-todas') { state.notifAdiar = state.notifAdiar || {}; var ate = new Date(Date.now() + 86400000).toISOString(); notifCache.forEach(function (n) { state.notifAdiar[n.id] = ate; }); save(); render(); }
     else if (act === 'drive-conectar') driveConectar();
     else if (act === 'drive-backup') driveBackup(false);
     else if (act === 'drive-restaurar') driveRestaurar();
@@ -969,6 +989,7 @@
     var t = e.target;
     var act = t.dataset && t.dataset.act; if (!act) return;
     if (act === 'drive-cfg') { var dc = dr(); if (t.dataset.k === 'auto') { dc.auto = t.checked; save(); render(); if (dc.auto) agendarDrive(); } else { dc.clientId = t.value.trim(); save(); } return; }
+    if (act === 'notif-cat') { state.notifOff = state.notifOff || {}; state.notifOff[t.dataset.k] = !t.checked; save(); render(); return; }
     if (act === 'fin-mes') { if (t.value) { finMes = t.value; render(); } return; }
     if (act === 'fin-orc') { state.orcamento = Math.max(0, Number(t.value) || 0); save(); render(); return; }
     if (act === 'fin-food') { finFood = t.value; render(); return; }
@@ -1154,7 +1175,7 @@
     a.download = 'estoque-inteligente-' + new Date().toISOString().slice(0, 10) + '.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-    state.ultimoExport = new Date().toISOString(); save(); if (tab === 'config' || tab === 'painel') render();
+    state.ultimoExport = new Date().toISOString(); save(); if (tab === 'config' || tab === 'notificacoes') render();
   }
   function importar(file) {
     if (!file) return;

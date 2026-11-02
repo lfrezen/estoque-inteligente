@@ -239,3 +239,15 @@ details.area summary::-webkit-details-marker { display: none; }
 .fin-bar:hover i { background: var(--brand); opacity: .7; }
 .fin-bar.sel i { background: var(--brand); }
 .fin-bar .v { font-size: .68rem; min-height: 1em; } .fin-bar .l { font-size: .7rem; } .fin-bar.sel .l { color: var(--ink); font-weight: 700; }
+
+/* Sino e central de notificações */
+.top-in .brand { flex: 1; min-width: 0; }
+.bell { position: relative; flex: 0 0 auto; width: 42px; height: 42px; border: 0; border-radius: 50%; background: rgba(255,255,255,.16); color: #fff; font-size: 1.2rem; cursor: pointer; display: grid; place-items: center; transition: background .15s; }
+.bell:hover { background: rgba(255,255,255,.26); }
+.bell[aria-pressed="true"] { background: #fff; }
+.bell .badge { position: absolute; top: -4px; right: -4px; min-width: 21px; height: 21px; padding: 0 5px; border-radius: 99px; background: var(--bad); color: #fff; font-size: .72rem; font-weight: 800; display: grid; place-items: center; border: 2px solid var(--hdr2); line-height: 1; }
+.bell .badge[hidden] { display: none; }
+.bell .badge.medio { background: var(--warn); }
+.notif { margin: 0 0 10px; flex-wrap: wrap; }
+.notif > div:nth-child(2) { flex: 1 1 240px; min-width: 0; }
+@media (max-width: 560px) { .top-in { flex-wrap: wrap; } .bell { order: 2; } .seg { order: 3; } .notif > .flex { flex: 0 0 100%; padding-left: 34px; } }
