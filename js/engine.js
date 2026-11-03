@@ -49,6 +49,29 @@
     });
     return { partes: partes, falta: falta > 1e-9 ? arred6(falta) : 0, disponivel: arred6(disponivel) };
   }
+
+  /* Igual a planoUso, mas a quantidade vem em kg de produto cru/embalado (o que o Cardápio calcula). Cada parte sai na
+     unidade do alimento (kg, L ou unidades), respeitando o peso por unidade de cada entrada. */
+  function planoUsoKg(state, food, kgNec) {
+    var linhas = (state.estoque || []).map(function (s, i) { return { s: s, i: i }; })
+      .filter(function (x) { return x.s.foodId === food.id && (Number(x.s.qtd) || 0) > 0; });
+    linhas.sort(function (a, b) {
+      var va = a.s.validade || '9999-99-99', vb = b.s.validade || '9999-99-99';
+      return va < vb ? -1 : va > vb ? 1 : a.i - b.i;
+    });
+    var falta = Number(kgNec) || 0, partes = [], disp = 0;
+    linhas.forEach(function (x) {
+      var tem = Number(x.s.qtd) || 0, kgLinha = lineKg(food, x.s), kgPorUn = tem > 0 ? kgLinha / tem : 0;
+      disp += kgLinha;
+      var tiraKg = Math.min(kgLinha, falta);
+      if (tiraKg > 1e-9 && kgPorUn > 0) {
+        var q = Math.min(tem, tiraKg / kgPorUn);
+        partes.push({ estoqueId: x.s.id, qtd: arred6(q), validade: x.s.validade || '', pesoUn: Number(x.s.pesoUn) || 0, restante: arred6(tem - q) }); falta -= tiraKg;
+      }
+    });
+    return { partes: partes, faltaKg: falta > 1e-9 ? arred6(falta) : 0, disponivelKg: arred6(disp) };
+  }
+
   /* desfaz um uso registrado em state.usos: devolve a quantidade às entradas (recria as que foram zeradas) */
   function desfazUso(state, usoId) {
     var usos = state.usos || [], i = usos.findIndex(function (u) { return u.id === usoId; });
@@ -327,6 +350,7 @@
   // limite em gramas prontas por refeição para uma pessoa de referência (2.000 kcal)
   var CAP = { cafe: 150, base: 230, leguminosa: 220, proteina: 150, vegetal: 150, fruta: 160, laticinio: 250, doce: 25, oleo: 25, oleaginosa: 50 };
 
+  function isoLocal(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
   function kcalPronto(f, g) { return g * f.kcal / (f.rend || 1) / 100; }
 
   function cardapio(state, an, dias, hoje) {
@@ -377,6 +401,14 @@
       var dia = { dia: d + 1, refeicoes: [], kcal: 0 }, carry = 0;
       var hojeEsc = {};
       REFEICOES.forEach(function (rf, ri) {
+        /* refeição de hoje já cozinhada (state.cardapioFeito): vale como está e não consome de novo (o estoque já foi baixado) */
+        var feito = d === 0 && state.cardapioFeito && state.cardapioFeito.data === isoLocal(hoje) && state.cardapioFeito.refeicoes && state.cardapioFeito.refeicoes[rf.nome];
+        if (feito) {
+          var itF = [];
+          feito.itens.forEach(function (m) { var f = an.fm[m.id]; if (!f) return; var kc = kcalPronto(f, m.g); dia.kcal += kc; itF.push({ food: f, g: m.g, kcal: kc }); });
+          carry = 0; dia.refeicoes.push({ nome: rf.nome, itens: itF, feito: true });
+          return;
+        }
         /* refeição montada pela pessoa (state.cardapioMan[dia][refeição] = [{ id, g }]): vale no lugar da sugestão e
            desconta do estoque como qualquer outra; não gera "dívida" de calorias para a próxima refeição */
         var man = state.cardapioMan && state.cardapioMan[String(d + 1)] && state.cardapioMan[String(d + 1)][rf.nome];
@@ -465,6 +497,6 @@
 
   var api = { allFoods: allFoods, foodMap: foodMap, toKg: toKg, lineKg: lineKg, fromKg: fromKg, household: household,
               analyze: analyze, despensa: despensa, sugestoes: sugestoes, ESTRATEGIAS: ESTRATEGIAS,
-              cardapio: cardapio, planoUso: planoUso, desfazUso: desfazUso, arred6: arred6, qtyTexto: qtyTexto, papel: papel, fmtDias: fmtDias, personKcal: personKcal };
+              cardapio: cardapio, planoUso: planoUso, planoUsoKg: planoUsoKg, isoLocal: isoLocal, desfazUso: desfazUso, arred6: arred6, qtyTexto: qtyTexto, papel: papel, fmtDias: fmtDias, personKcal: personKcal };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(typeof window !== 'undefined' ? window : this);

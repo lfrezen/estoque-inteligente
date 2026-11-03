@@ -5,7 +5,7 @@
 
   var DEFAULT = {
     versao: 1, modo: 'normal', metaDias: 90, pessoas: [], estoque: [], meds: [], custom: [], porcoes: {},
-    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, validadeJanela: 30, atualizado: null, gastos: [], orcamento: 0, cardapioMan: {}, usos: [], drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
+    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, validadeJanela: 30, atualizado: null, gastos: [], orcamento: 0, cardapioMan: {}, cardapioFeito: null, usos: [], drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
   };
   var state = load();
   var tab = 'painel';
@@ -24,6 +24,22 @@
     if (window.DRIVE) agendarDrive();
   }
   function norm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+  /* ---- datas no padrão brasileiro (dd/mm/aaaa); o estado guarda AAAA-MM-DD ---- */
+  function dtBr(iso) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
+  function dtIso(txt) {
+    var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(txt || '').trim()); if (!m) return '';
+    var d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]), dt = new Date(y, mo - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d ? m[3] + '-' + m[2] + '-' + m[1] : '';
+  }
+  function dtInput(attrs, iso) { return '<input type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" autocomplete="off" data-dt="1" value="' + dtBr(iso) + '" ' + attrs + '>'; }
+  function dtMask(el) { var d = el.value.replace(/\D/g, '').slice(0, 8), o = d.slice(0, 2); if (d.length > 2) o += '/' + d.slice(2, 4); if (d.length > 4) o += '/' + d.slice(4); el.value = o; }
+  /* confere os campos de data de um formulário; devolve false (e avisa) se algum estiver preenchido de forma inválida */
+  function dtFormOk(form) {
+    var els = form.querySelectorAll('[data-dt]');
+    for (var i = 0; i < els.length; i++) if (els[i].value && !dtIso(els[i].value)) { els[i].focus(); alert('Data inválida: use dia/mês/ano, por exemplo ' + dtBr(FIN.hojeISO()) + '.'); return false; }
+    return true;
+  }
+
   function uid() { return 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function n1(x) { return (Math.round(x * 10) / 10).toLocaleString('pt-BR'); }
@@ -256,16 +272,20 @@
     var fid = usando.escopo === 'alimento' ? usando.id : (find(state.estoque, usando.id) || {}).foodId; if (!fid) return;
     var pl = E.planoUso(state, fid, qtd, usando.escopo === 'linha' ? usando.id : '');
     if (pl.falta > 0 || !pl.partes.length) { usoPreview(); return; }
-    pl.partes.forEach(function (p) {
-      var s = find(state.estoque, p.estoqueId); if (!s) return;
-      if (p.restante <= 1e-6) state.estoque = state.estoque.filter(function (x) { return x.id !== p.estoqueId; }); else s.qtd = p.restante;
-    });
-    var nota = (document.getElementById('usoNota') || {}).value || '';
-    state.usos = state.usos || [];
-    state.usos.unshift({ id: uid(), data: new Date().toISOString(), foodId: fid, total: E.arred6(qtd), nota: nota.trim().slice(0, 40),
-      partes: pl.partes.map(function (p) { return { estoqueId: p.estoqueId, qtd: p.qtd, validade: p.validade, pesoUn: p.pesoUn }; }) });
-    if (state.usos.length > 300) state.usos.length = 300;
+    baixaAplicar(fid, pl.partes, (document.getElementById('usoNota') || {}).value || '');
     usando = null; save(); render();
+  }
+  /* aplica as partes de um plano de uso ao estoque e registra no histórico; devolve o id do registro */
+  function baixaAplicar(fid, partes, nota) {
+    partes.forEach(function (p) {
+      var s = find(state.estoque, p.estoqueId); if (!s) return;
+      if (p.restante <= 1e-6) state.estoque = state.estoque.filter(function (x) { return x.id !== p.estoqueId; }); else s.qtd = Math.round(p.restante * 1e4) / 1e4;
+    });
+    var uso = { id: uid(), data: new Date().toISOString(), foodId: fid, total: E.arred6(partes.reduce(function (a, p) { return a + p.qtd; }, 0)), nota: String(nota || '').trim().slice(0, 40),
+      partes: partes.map(function (p) { return { estoqueId: p.estoqueId, qtd: p.qtd, validade: p.validade, pesoUn: p.pesoUn }; }) };
+    state.usos = state.usos || []; state.usos.unshift(uso);
+    if (state.usos.length > 300) state.usos.length = 300;
+    return uso.id;
   }
   function historicoUso(fm) {
     var us = state.usos || []; if (!us.length) return '';
@@ -286,9 +306,9 @@
       '<input type="hidden" name="foodId" id="foodId"><ul id="foodList" role="listbox" hidden></ul></div>' +
       '<div><label for="qtdIn">Quantidade <span id="unitLbl">(kg)</span></label><input id="qtdIn" name="qtd" type="number" min="0" step="any" required></div>' +
       '<div id="pesoWrap" hidden><label for="pesoIn">Peso drenado por unidade (g)</label><input id="pesoIn" name="pesoUn" type="number" min="1" step="any" placeholder="ex.: 179"></div>' +
-      '<div><label>Validade (opcional)</label><input name="validade" type="date"></div>' +
+      '<div><label>Validade (opcional)</label>' + dtInput('name="validade"', '') + '</div>' +
       '<div><label for="precoIn">Preço pago (R$, total)</label><input id="precoIn" name="preco" type="number" min="0" step="0.01" placeholder="opcional"></div>' +
-      '<div><label for="dataCompra">Data da compra</label><input id="dataCompra" name="dataCompra" type="date" value="' + FIN.hojeISO() + '"></div>' +
+      '<div><label for="dataCompra">Data da compra</label>' + dtInput('id="dataCompra" name="dataCompra"', FIN.hojeISO()) + '</div>' +
       '<div><label for="lojaIn">Loja (opcional)</label><input id="lojaIn" name="loja" maxlength="40" list="lojas"></div>' +
       '<div><button class="btn" type="submit">Adicionar</button></div></form>' + lojasList() +
       '<p class="muted" id="foodHint">' + foods.length + ' alimentos no catálogo. Comece a digitar o nome.</p></div>';
@@ -307,7 +327,7 @@
         '<td class="num"><input type="number" min="0" step="any" value="' + s.qtd + '" data-act="qtd" data-id="' + s.id + '" style="width:85px" aria-label="Quantidade"> ' + unitLabel(f).replace('(s)', '') +
           (f.un === 'un' ? ' × <input type="number" min="1" step="any" value="' + (Number(s.pesoUn) > 0 ? s.pesoUn : f.gpu) + '" data-act="pesoUn" data-id="' + s.id + '" style="width:72px" aria-label="Peso por unidade em gramas"> g' : '') + '</td>' +
         '<td class="num">' + n1(kg * f.rend) + '</td><td class="num">' + n0(kg * 10 * f.kcal) + '</td>' +
-        '<td><input type="date" value="' + esc(s.validade || '') + '" data-act="validade" data-id="' + s.id + '"></td>' +
+        '<td>' + dtInput('data-act="validade" data-id="' + s.id + '" aria-label="Validade"', s.validade || '') + '</td>' +
         '<td class="num"><input type="number" min="0" step="0.01" value="' + (gl ? gl.preco : '') + '" data-act="gasto-preco" data-id="' + s.id + '" style="width:84px" placeholder="R$" aria-label="Preço pago">' + (gl ? '<div class="muted">' + unitPreco(gl) + ' · ' + new Date(gl.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + '</div>' : '') + '</td>' +
         '<td class="num">' + (sub ? '' : (it && it.porDiaKg > 0 ? dias(it.dias) : '—')) + '</td>' +
         '<td class="acoes"><button class="btn sec mini" type="button" data-act="uso-abrir" data-escopo="linha" data-id="' + s.id + '" title="Dar baixa: usei um pouco">➖ Usar</button> <button class="btn del" data-act="del-estoque" data-id="' + s.id + '" aria-label="Remover entrada">×</button></td></tr>' + painelUso('linha', s.id, f);
@@ -365,7 +385,7 @@
     if (!lista.length) h += '<p class="muted">Nenhuma compra neste mês.</p>';
     else h += '<div class="scroll"><table><thead><tr><th>Data</th><th>Item</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th><th class="num">Preço unit.</th><th>Loja</th><th></th></tr></thead><tbody>' +
       lista.slice().sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); }).map(function (x) {
-        return '<tr><td><input type="date" value="' + esc(x.data) + '" data-act="fin-edit" data-k="data" data-id="' + x.id + '" aria-label="Data"></td>' +
+        return '<tr><td>' + dtInput('data-act="fin-edit" data-k="data" data-id="' + x.id + '" aria-label="Data"', x.data) + '</td>' +
           '<td>' + esc(x.nome) + '<div class="muted">' + esc(FIN.rotuloGrupo(x, D.GRUPOS)) + '</div></td><td class="num">' + qtdGasto(x) + '</td>' +
           '<td class="num"><input type="number" min="0" step="0.01" value="' + x.preco + '" data-act="fin-edit" data-k="preco" data-id="' + x.id + '" style="width:90px" aria-label="Valor"></td>' +
           '<td class="num">' + unitPreco(x) + '</td><td><input value="' + esc(x.loja || '') + '" data-act="fin-edit" data-k="loja" data-id="' + x.id + '" maxlength="40" style="width:110px" aria-label="Loja"></td>' +
@@ -394,7 +414,7 @@
       '<div><label for="gDesc">Descrição</label><input id="gDesc" name="nome" required maxlength="60" placeholder="ex.: Galão de água 20 L"></div>' +
       '<div><label for="gCat">Categoria</label><select id="gCat" name="categoria">' + Object.keys(FIN.CATEGORIAS).map(function (k) { return '<option value="' + k + '">' + FIN.CATEGORIAS[k] + '</option>'; }).join('') + '</select></div>' +
       '<div><label for="gVal">Valor (R$)</label><input id="gVal" name="preco" type="number" min="0.01" step="0.01" required></div>' +
-      '<div><label for="gData">Data</label><input id="gData" name="data" type="date" value="' + FIN.hojeISO() + '" required></div>' +
+      '<div><label for="gData">Data</label>' + dtInput('id="gData" name="data" required', FIN.hojeISO()) + '</div>' +
       '<div><label for="gLoja">Loja (opcional)</label><input id="gLoja" name="loja" maxlength="40" list="lojas"></div>' +
       '<div><button class="btn" type="submit">Lançar</button></div></form></details>' + lojasList();
   }
@@ -428,7 +448,7 @@
       '<div><label for="medForma">Forma</label><select id="medForma" name="forma">' + Object.keys(M.FORMAS).map(function (k) { return '<option value="' + k + '"' + (pre && pre.forma === k ? ' selected' : '') + '>' + M.FORMAS[k] + '</option>'; }).join('') + '</select></div>' +
       '<div><label for="medQtd">Quantidade</label><input id="medQtd" name="qtd" type="number" min="0" step="any" required></div>' +
       '<div><label for="medUn">Unidade</label><select id="medUn" name="un">' + Object.keys(M.UNIDADES).map(function (k) { return '<option value="' + k + '">' + M.UNIDADES[k] + '</option>'; }).join('') + '</select></div>' +
-      '<div><label for="medVal">Validade</label><input id="medVal" name="validade" type="date"></div>' +
+      '<div><label for="medVal">Validade</label>' + dtInput('id="medVal" name="validade"', '') + '</div>' +
       '<div><label for="medPess">Para quem</label><select id="medPess" name="pessoa"><option value="">Todos / uso geral</option>' + state.pessoas.map(function (p, i) { return '<option value="' + p.id + '">' + esc(p.nome || 'Pessoa ' + (i + 1)) + '</option>'; }).join('') + '</select></div>' +
       '<div><label><input type="checkbox" id="medCont" name="continuo" data-act="med-cont" style="width:auto"> Uso contínuo</label>' +
       '<input id="medDose" name="dose" type="number" min="0" step="any" placeholder="Dose por dia (unidades)" disabled></div>' +
@@ -643,14 +663,18 @@
     }
     cd.forEach(function (d) {
       var cor = d.cobertura >= 90 ? '' : d.cobertura >= 60 ? 'warn' : 'bad';
-      h += '<div class="card menu-day"><div class="dnum"><small>DIA</small>' + d.dia + '</div><div>' + d.refeicoes.map(function (r) {
+      h += '<div class="card menu-day"><div class="dnum"><small>DIA</small>' + d.dia + (d.dia === 1 ? '<small>hoje</small>' : '') + '</div><div>' + d.refeicoes.map(function (r) {
         var editando = cardEdit && cardEdit.dia === d.dia && cardEdit.ref === r.nome;
         if (editando) return cardEditor(r);
-        if (!r.itens.length && !r.manual) return '';
+        if (!r.itens.length && !r.manual && !r.feito) return '';
+        if (r.feito) return '<div class="meal feita"><b>' + r.nome + ':</b> ' + r.itens.map(function (i) {
+          return em(i.food) + ' ' + esc(i.food.nome.replace(/ \(.*\)/, '')) + ' <b>' + E.qtyTexto(i.food, i.g) + '</b>';
+        }).join(' · ') + ' <span class="tag est">✅ cozinhada</span> <button class="btn sec mini" type="button" data-act="card-desfeito" data-ref="' + esc(r.nome) + '" title="Devolver ao estoque e voltar à sugestão">Desfazer</button></div>';
         return '<div class="meal"><b>' + r.nome + ':</b> ' + (r.itens.length ? r.itens.map(function (i) {
           return em(i.food) + ' ' + esc(i.food.nome.replace(/ \(.*\)/, '')) + ' <b>' + E.qtyTexto(i.food, i.g) + '</b>' + (i.foraEstoque ? ' <span class="tag est" title="Este alimento não está no estoque">fora do estoque</span>' : '');
         }).join(' · ') : '<span class="muted">vazia</span>') + (r.manual ? ' <span class="tag est">minha</span>' : '') +
-          ' <button class="btn sec mini" type="button" data-act="card-edit" data-dia="' + d.dia + '" data-ref="' + esc(r.nome) + '" aria-label="Editar ' + esc(r.nome) + ' do dia ' + d.dia + '" title="Editar esta refeição">✏️</button></div>';
+          ' <button class="btn sec mini" type="button" data-act="card-edit" data-dia="' + d.dia + '" data-ref="' + esc(r.nome) + '" aria-label="Editar ' + esc(r.nome) + ' do dia ' + d.dia + '" title="Editar esta refeição">✏️</button>' +
+          (d.dia === 1 && r.itens.length ? ' <button class="btn sec mini" type="button" data-act="card-feito" data-ref="' + esc(r.nome) + '" title="Dar baixa no estoque dos itens desta refeição">✅ Cozinhei</button>' : '') + '</div>';
       }).join('') + '<div class="muted">≈ ' + n0(d.kcal) + ' kcal (' + n0(d.cobertura) + '% da necessidade)</div>' +
         '<div class="bar ' + cor + '" style="margin-top:4px"><i style="width:' + Math.min(100, d.cobertura).toFixed(0) + '%"></i></div></div></div>';
     });
@@ -1064,6 +1088,36 @@
       '<li>Cole o ID acima e toque em <b>Entrar com o Google</b>.</li></ol></details></div>';
   }
 
+  /* ---- cardápio: marcar a refeição de hoje como cozinhada (dá baixa no estoque) ---- */
+  function cardFeito(ref) {
+    var an = E.analyze(state), cd = E.cardapio(state, an, 7), d = cd[0], r = d && d.refeicoes.filter(function (x) { return x.nome === ref; })[0];
+    if (!r || !r.itens.length || r.feito) return;
+    var linhas = [], falta = [];
+    r.itens.forEach(function (i) {
+      var f = i.food; if (i.foraEstoque) return;
+      var kg = i.g / (f.rend || 1) / 1000, pl = E.planoUsoKg(state, f, kg);
+      if (!pl.partes.length) { falta.push(f.nome.replace(/ \(.*\)/, '')); return; }
+      linhas.push({ f: f, i: i, pl: pl });
+      if (pl.faltaKg > 0.0005) falta.push(f.nome.replace(/ \(.*\)/, '') + ' (faltou ' + n0(pl.faltaKg * 1000) + ' g)');
+    });
+    var msg = 'Marcar ' + ref + ' de hoje como cozinhada e dar baixa no estoque?\n\n' + linhas.map(function (x) {
+      return '• ' + x.f.nome.replace(/ \(.*\)/, '') + ': ' + E.qtyTexto(x.f, x.i.g) + ' pronto → sai ' + fmtQtd(x.f, x.pl.partes.reduce(function (a, p) { return a + p.qtd; }, 0)) + ' do estoque';
+    }).join('\n') + (falta.length ? '\n\nNão há estoque suficiente de: ' + falta.join(', ') + '. A baixa será só do que existe.' : '');
+    if (!confirm(msg)) return;
+    var usos = [];
+    linhas.forEach(function (x) { usos.push(baixaAplicar(x.f.id, x.pl.partes, 'Cozinhei: ' + ref)); });
+    var hoje = E.isoLocal(new Date());
+    if (!state.cardapioFeito || state.cardapioFeito.data !== hoje) state.cardapioFeito = { data: hoje, refeicoes: {} };
+    state.cardapioFeito.refeicoes[ref] = { itens: r.itens.map(function (i) { return { id: i.food.id, g: i.g }; }), usos: usos };
+    save(); render();
+  }
+  function cardDesfeito(ref) {
+    var cf = state.cardapioFeito, r = cf && cf.refeicoes && cf.refeicoes[ref]; if (!r) return;
+    if (!confirm('Devolver ao estoque o que foi usado em ' + ref + ' e voltar à sugestão?')) return;
+    (r.usos || []).forEach(function (u) { E.desfazUso(state, u); });
+    delete cf.refeicoes[ref]; save(); render();
+  }
+
   /* ---------------- AJUDA ---------------- */
   function vAjuda() {
     var sec = function (aberto, titulo, corpo) { return '<details class="card area"' + (aberto ? ' open' : '') + '><summary><span><b>' + titulo + '</b></span></summary><div class="ajuda">' + corpo + '</div></details>'; };
@@ -1142,6 +1196,8 @@
     else if (act === 'uso-cancel') { usando = null; render(); }
     else if (act === 'uso-ok') usoConfirmar();
     else if (act === 'uso-desfazer') { if (E.desfazUso(state, id)) { save(); render(); } }
+    else if (act === 'card-feito') cardFeito(t.dataset.ref);
+    else if (act === 'card-desfeito') cardDesfeito(t.dataset.ref);
     else if (act === 'card-edit') { cardIniciar(Number(t.dataset.dia), t.dataset.ref); render(); var cf = document.getElementById('cardFood'); if (cf) cf.scrollIntoView({ block: 'center' }); }
     else if (act === 'card-cancel') { cardEdit = null; render(); }
     else if (act === 'card-rm') { cardEdit.itens.splice(Number(t.dataset.i), 1); render(); }
@@ -1180,7 +1236,8 @@
     if (act === 'fin-mes') { if (t.value) { finMes = t.value; render(); } return; }
     if (act === 'fin-orc') { state.orcamento = Math.max(0, Number(t.value) || 0); save(); render(); return; }
     if (act === 'fin-food') { finFood = t.value; render(); return; }
-    if (act === 'fin-edit') { var ge = find(gs(), t.dataset.id); if (ge) { var k = t.dataset.k; ge[k] = k === 'preco' ? Math.max(0, Number(t.value) || 0) : t.value; if (k === 'preco' && !(ge.preco > 0)) state.gastos = gs().filter(function (x) { return x !== ge; }); save(); render(); } return; }
+    if (t.dataset.dt) { var iso0 = dtIso(t.value); if (t.value && !iso0) { alert('Data inválida: use dia/mês/ano, por exemplo ' + dtBr(FIN.hojeISO()) + '.'); render(); return; } t = { dataset: t.dataset, value: iso0 }; }
+    if (act === 'fin-edit') { var ge = find(gs(), t.dataset.id); if (ge) { var k = t.dataset.k; if (k === 'data' && !t.value) { render(); return; } ge[k] = k === 'preco' ? Math.max(0, Number(t.value) || 0) : t.value; if (k === 'preco' && !(ge.preco > 0)) state.gastos = gs().filter(function (x) { return x !== ge; }); save(); render(); } return; }
     if (act === 'gasto-preco') {
       var sl = find(state.estoque, t.dataset.id), vv = Number(t.value) || 0, gl2 = gs().filter(function (x) { return x.estoqueId === t.dataset.id; })[0], f2 = sl && E.foodMap(E.allFoods(state))[sl.foodId];
       if (gl2) { if (vv > 0) gl2.preco = vv; else state.gastos = gs().filter(function (x) { return x !== gl2; }); }
@@ -1206,7 +1263,9 @@
   document.addEventListener('submit', function (e) {
     var f = e.target.closest('[data-form]'); if (!f) return;
     e.preventDefault();
+    if (!dtFormOk(f)) return;
     var fd = new FormData(f), kind = f.dataset.form;
+    ['validade', 'dataCompra', 'data'].forEach(function (n) { if (fd.has(n)) fd.set(n, dtIso(fd.get(n))); });
     if (kind === 'pessoa') {
       state.pessoas.push({ id: uid(), nome: String(fd.get('nome') || '').trim(), perfil: fd.get('perfil'), kcal: Number(fd.get('kcal')) || 0 });
     } else if (kind === 'estoque') {
@@ -1322,6 +1381,7 @@
     var t = e.target;
     if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; document.getElementById('pesoWrap').hidden = true; document.getElementById('pesoIn').value = ''; openCombo(); }
     else if (t.id === 'catQ') { cat.q = t.value; cat.n = 80; catRefresh(); }
+    else if (t.dataset && t.dataset.dt) dtMask(t);
     else if (t.id === 'usoQtd' || t.id === 'usoUn') usoPreview();
     else if (t.dataset && t.dataset.act === 'card-g' && cardEdit) { var ix = Number(t.dataset.i); if (cardEdit.itens[ix]) cardEdit.itens[ix].g = Number(t.value) || 0; }
   });

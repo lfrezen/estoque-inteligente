@@ -289,3 +289,5 @@ table.estoque .acoes { text-align: right; }
 table.estoque .acoes .btn { margin: 2px 0 2px 2px; padding-left: 8px; padding-right: 8px; }
 table.estoque tr.grp.aberto td:first-child { border-left: 3px solid var(--brand); }
 table.estoque tr.grp.aberto td { background: var(--brand-soft); }
+.meal.feita { background: var(--brand-soft); border-radius: 10px; padding: 6px 8px; }
+.dnum small + small { margin-top: 2px; font-size: .62rem; opacity: .85; }
