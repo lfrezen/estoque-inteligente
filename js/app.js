@@ -295,7 +295,7 @@
     if (!state.estoque.length) return h + '<div class="empty"><big>📦</big>Estoque vazio. Adicione o primeiro alimento acima.</div>';
     var an = E.analyze(state);
     var byFood = {}; an.items.forEach(function (i) { byFood[i.food.id] = i; });
-    h += '<div class="card"><div class="scroll"><table class="estoque"><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Preço (R$)</th><th class="num">Dura</th><th></th></tr></thead><tbody>';
+    h += '<div class="card"><div class="scroll"><table class="estoque"><colgroup><col style="width:18%"><col style="width:16%"><col style="width:8%"><col style="width:9%"><col style="width:18%"><col style="width:10%"><col style="width:7%"><col style="width:14%"></colgroup><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Preço (R$)</th><th class="num">Dura</th><th></th></tr></thead><tbody>';
     var grupos = {}, ordem = [];
     state.estoque.forEach(function (s) { if (!fm[s.foodId]) return; if (!grupos[s.foodId]) { grupos[s.foodId] = []; ordem.push(s.foodId); } grupos[s.foodId].push(s); });
     ordem.sort(function (a, b) { return fm[a].nome.localeCompare(fm[b].nome, 'pt-BR'); });
@@ -318,7 +318,7 @@
       var aberto = !!estOpen[fid], it = byFood[fid];
       var totQ = ls.reduce(function (a, s) { return a + (Number(s.qtd) || 0); }, 0), totKg = ls.reduce(function (a, s) { return a + E.lineKg(f, s); }, 0);
       var prim = ls.filter(function (s) { return s.validade; })[0];
-      h += '<tr class="grp"><td><button class="grp-btn" type="button" data-act="grp-toggle" data-id="' + esc(fid) + '" aria-expanded="' + aberto + '"><span aria-hidden="true">' + (aberto ? '▾' : '▸') + '</span> ' + fname(f, ls.length + ' entradas') + '</button></td>' +
+      h += '<tr class="grp' + (aberto ? ' aberto' : '') + '"><td><button class="grp-btn" type="button" data-act="grp-toggle" data-id="' + esc(fid) + '" aria-expanded="' + aberto + '"><span aria-hidden="true">' + (aberto ? '▾' : '▸') + '</span> ' + fname(f, ls.length + ' entradas') + '</button></td>' +
         '<td class="num"><b>' + n1(totQ) + '</b> ' + unitLabel(f).replace('(s)', '') + '</td>' +
         '<td class="num">' + n1(totKg * f.rend) + '</td><td class="num">' + n0(totKg * 10 * f.kcal) + '</td>' +
         '<td>' + (prim ? '<span class="muted">mais próxima:</span> ' + dataBr(prim.validade) : '<span class="muted">sem validade</span>') + '</td>' +
