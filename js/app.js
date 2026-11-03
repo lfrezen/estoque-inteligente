@@ -5,7 +5,7 @@
 
   var DEFAULT = {
     versao: 1, modo: 'normal', metaDias: 90, pessoas: [], estoque: [], meds: [], custom: [], porcoes: {},
-    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, validadeJanela: 30, atualizado: null, gastos: [], orcamento: 0, drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
+    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, validadeJanela: 30, atualizado: null, gastos: [], orcamento: 0, cardapioMan: {}, drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
   };
   var state = load();
   var tab = 'painel';
@@ -556,7 +556,9 @@
     var h = '<h2>Cardápio sugerido</h2>';
     if (!an.h.n || !an.items.length) return h + '<div class="empty"><big>🍽️</big>Cadastre pessoas e estoque para gerar o cardápio.</div>';
     var cd = E.cardapio(state, an, 7);
-    h += '<p class="muted">Quantidades <b>prontas para comer</b> para a casa toda, no modo ' + D.MODOS[state.modo].nome + ' (' + n0(an.h.kcal) + ' kcal por dia). Usa <b>qualquer alimento do estoque</b>: cada um entra como base, leguminosa, proteína, legume, fruta, gordura ou lanche, e as quantidades fecham as calorias da casa. Itens perto da validade entram primeiro.</p>';
+    h += '<p class="muted">Quantidades <b>prontas para comer</b> para a casa toda, no modo ' + D.MODOS[state.modo].nome + ' (' + n0(an.h.kcal) + ' kcal por dia). Usa <b>qualquer alimento do estoque</b>: cada um entra como base, leguminosa, proteína, legume, fruta, gordura ou lanche, e as quantidades fecham as calorias da casa. Itens perto da validade entram primeiro. <b>Quer outra coisa? Toque em ✏️ numa refeição</b> e monte a sua: a sugestão dos outros dias se ajusta ao que você usou.</p>';
+    var nMan = Object.keys(state.cardapioMan || {}).reduce(function (a, k) { return a + Object.keys(state.cardapioMan[k] || {}).length; }, 0);
+    if (nMan) h += '<div class="sug"><span class="ic" aria-hidden="true">✏️</span><div><b>' + nMan + ' refeição(ões) montada(s) por você</b>Elas valem no lugar da sugestão. <button class="btn sec" type="button" data-act="card-reset-all">Voltar tudo à sugestão</button></div></div>';
     if (!cd.length || !cd[0].kcal) return h + '<div class="empty"><big>🍽️</big>Os alimentos cadastrados não bastam para montar refeições. Adicione cereais, leguminosas ou proteínas ao estoque.</div>';
     if (cd.esgota.length) {
       h += '<div class="sug medio"><span class="ic" aria-hidden="true">⏳</span><div><b>Acabam durante a semana</b>' + cd.esgota.map(function (x) { return esc(x.food.nome.replace(/ \(.*\)/, '')) + ' (dia ' + x.dia + ')'; }).join(', ') + '. Depois disso, o cardápio troca por outros alimentos do estoque.</div></div>';
@@ -564,14 +566,52 @@
     cd.forEach(function (d) {
       var cor = d.cobertura >= 90 ? '' : d.cobertura >= 60 ? 'warn' : 'bad';
       h += '<div class="card menu-day"><div class="dnum"><small>DIA</small>' + d.dia + '</div><div>' + d.refeicoes.map(function (r) {
-        if (!r.itens.length) return '';
-        return '<div class="meal"><b>' + r.nome + ':</b> ' + r.itens.map(function (i) {
-          return em(i.food) + ' ' + esc(i.food.nome.replace(/ \(.*\)/, '')) + ' <b>' + E.qtyTexto(i.food, i.g) + '</b>';
-        }).join(' · ') + '</div>';
+        var editando = cardEdit && cardEdit.dia === d.dia && cardEdit.ref === r.nome;
+        if (editando) return cardEditor(r);
+        if (!r.itens.length && !r.manual) return '';
+        return '<div class="meal"><b>' + r.nome + ':</b> ' + (r.itens.length ? r.itens.map(function (i) {
+          return em(i.food) + ' ' + esc(i.food.nome.replace(/ \(.*\)/, '')) + ' <b>' + E.qtyTexto(i.food, i.g) + '</b>' + (i.foraEstoque ? ' <span class="tag est" title="Este alimento não está no estoque">fora do estoque</span>' : '');
+        }).join(' · ') : '<span class="muted">vazia</span>') + (r.manual ? ' <span class="tag est">minha</span>' : '') +
+          ' <button class="btn sec mini" type="button" data-act="card-edit" data-dia="' + d.dia + '" data-ref="' + esc(r.nome) + '" aria-label="Editar ' + esc(r.nome) + ' do dia ' + d.dia + '" title="Editar esta refeição">✏️</button></div>';
       }).join('') + '<div class="muted">≈ ' + n0(d.kcal) + ' kcal (' + n0(d.cobertura) + '% da necessidade)</div>' +
         '<div class="bar ' + cor + '" style="margin-top:4px"><i style="width:' + Math.min(100, d.cobertura).toFixed(0) + '%"></i></div></div></div>';
     });
     return h;
+  }
+
+  /* ---- cardápio: montar a própria refeição ---- */
+  var cardEdit = null; /* { dia, ref, itens: [{ id, g }] } */
+  function cardEditor(r) {
+    var foods = E.allFoods(state), fm = E.foodMap(foods);
+    var emEst = {}; (state.estoque || []).forEach(function (s) { emEst[s.foodId] = true; });
+    var lista = foods.filter(function (f) { return emEst[f.id]; }).concat(foods.filter(function (f) { return !emEst[f.id]; }));
+    var h = '<div class="meal editor"><b>✏️ ' + esc(r.nome) + ' (dia ' + cardEdit.dia + ')</b>';
+    h += cardEdit.itens.length ? cardEdit.itens.map(function (it, i) {
+      var f = fm[it.id]; if (!f) return '';
+      return '<div class="flex" style="margin:6px 0;align-items:center"><span style="flex:1;min-width:140px">' + em(f) + ' ' + esc(f.nome.replace(/ \(.*\)/, '')) + '</span>' +
+        '<input type="number" min="1" step="5" value="' + Math.round(it.g) + '" data-act="card-g" data-i="' + i + '" aria-label="Gramas prontas de ' + esc(f.nome) + '" style="width:90px"> <span class="muted">g</span>' +
+        '<button class="btn sec mini" type="button" data-act="card-rm" data-i="' + i + '" aria-label="Remover ' + esc(f.nome) + '">×</button></div>';
+    }).join('') : '<p class="muted">Refeição vazia. Adicione alimentos abaixo.</p>';
+    h += '<div class="flex" style="margin:8px 0;align-items:end"><div style="flex:2;min-width:160px"><label for="cardFood">Adicionar alimento</label><input id="cardFood" list="cardFoods" placeholder="Digite para buscar" autocomplete="off"></div>' +
+      '<div style="width:110px"><label for="cardG">Gramas prontas</label><input id="cardG" type="number" min="1" step="5" placeholder="padrão"></div>' +
+      '<button class="btn sec" type="button" data-act="card-add">Adicionar</button></div>' +
+      '<datalist id="cardFoods">' + lista.map(function (f) { return '<option value="' + esc(f.nome) + '">'; }).join('') + '</datalist>' +
+      '<p class="muted" style="margin:0 0 6px">Quantidades em gramas <b>prontas para comer</b>, para a casa toda. Alimentos que estão no estoque são descontados dele.</p>' +
+      '<div class="flex"><button class="btn" type="button" data-act="card-save">Salvar refeição</button><button class="btn sec" type="button" data-act="card-cancel">Cancelar</button>' +
+      (r.manual ? '<button class="btn sec" type="button" data-act="card-reset">Voltar à sugestão</button>' : '') + '</div></div>';
+    return h;
+  }
+  function cardAchar(nome) {
+    var q = norm(nome); if (!q) return null; var foods = E.allFoods(state);
+    return foods.filter(function (f) { return norm(f.nome) === q; })[0] || foods.filter(function (f) { return norm(f.nome).indexOf(q) >= 0; })[0] || null;
+  }
+  function cardLimpa(dia, ref) {
+    var m = state.cardapioMan || {}; if (m[dia]) { delete m[dia][ref]; if (!Object.keys(m[dia]).length) delete m[dia]; }
+  }
+  function cardIniciar(dia, ref) {
+    var cd = E.cardapio(state, E.analyze(state), 7), d = cd.filter(function (x) { return x.dia === dia; })[0];
+    var r = d && d.refeicoes.filter(function (x) { return x.nome === ref; })[0];
+    cardEdit = { dia: dia, ref: ref, itens: r ? r.itens.map(function (i) { return { id: i.food.id, g: i.g }; }) : [] };
   }
 
   /* ---------------- ESTRATÉGIAS ---------------- */
@@ -1019,6 +1059,20 @@
     else if (act === 'notif-adiar') { (state.notifAdiar = state.notifAdiar || {})[id] = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
     else if (act === 'notif-reativar') { if (state.notifAdiar) delete state.notifAdiar[id]; save(); render(); }
     else if (act === 'notif-adiar-todas') { state.notifAdiar = state.notifAdiar || {}; var ate = new Date(Date.now() + 86400000).toISOString(); notifCache.forEach(function (n) { state.notifAdiar[n.id] = ate; }); save(); render(); }
+    else if (act === 'card-edit') { cardIniciar(Number(t.dataset.dia), t.dataset.ref); render(); var cf = document.getElementById('cardFood'); if (cf) cf.scrollIntoView({ block: 'center' }); }
+    else if (act === 'card-cancel') { cardEdit = null; render(); }
+    else if (act === 'card-rm') { cardEdit.itens.splice(Number(t.dataset.i), 1); render(); }
+    else if (act === 'card-add') {
+      var fi = document.getElementById('cardFood'), gi = document.getElementById('cardG'), fd = cardAchar(fi.value);
+      if (!fd) { alert('Escolha um alimento da lista.'); fi.focus(); return; }
+      cardEdit.itens.push({ id: fd.id, g: Number(gi.value) || Math.round(fd.porcao || 100) }); render(); var f2 = document.getElementById('cardFood'); if (f2) f2.focus();
+    }
+    else if (act === 'card-save') {
+      var ok = cardEdit.itens.filter(function (x) { return Number(x.g) > 0; }).map(function (x) { return { id: x.id, g: Math.round(Number(x.g)) }; });
+      state.cardapioMan = state.cardapioMan || {}; (state.cardapioMan[cardEdit.dia] = state.cardapioMan[cardEdit.dia] || {})[cardEdit.ref] = ok; cardEdit = null; save(); render();
+    }
+    else if (act === 'card-reset') { cardLimpa(cardEdit.dia, cardEdit.ref); cardEdit = null; save(); render(); }
+    else if (act === 'card-reset-all') { if (confirm('Voltar todas as refeições à sugestão automática? O que você montou será perdido.')) { state.cardapioMan = {}; cardEdit = null; save(); render(); } }
     else if (act === 'drive-conectar') driveConectar();
     else if (act === 'drive-backup') driveBackup(false);
     else if (act === 'drive-restaurar') driveRestaurar();
@@ -1185,6 +1239,7 @@
     var t = e.target;
     if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; document.getElementById('pesoWrap').hidden = true; document.getElementById('pesoIn').value = ''; openCombo(); }
     else if (t.id === 'catQ') { cat.q = t.value; cat.n = 80; catRefresh(); }
+    else if (t.dataset && t.dataset.act === 'card-g' && cardEdit) { var ix = Number(t.dataset.i); if (cardEdit.itens[ix]) cardEdit.itens[ix].g = Number(t.value) || 0; }
   });
   document.addEventListener('toggle', function (e) { var d = e.target; if (d && d.dataset && d.dataset.area) prOpen[d.dataset.area] = d.open; }, true);
   document.addEventListener('focusin', function (e) { if (e.target.id === 'foodQ') openCombo(); });
