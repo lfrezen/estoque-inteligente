@@ -275,3 +275,17 @@ table.estoque tr.usar-row td { background: var(--brand-soft); }
 .grp-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
 table.estoque .acoes { white-space: nowrap; }
 .bad { color: var(--bad, #b3261e); }
+
+/* Estoque: colunas fixas (abrir um grupo não desloca nada) e entradas do grupo recuadas */
+table.estoque { table-layout: fixed; width: 100%; min-width: 780px; }
+table.estoque td:first-child { overflow-wrap: anywhere; }
+table.estoque th { white-space: nowrap; }
+table.estoque th:nth-child(3) { white-space: normal; }
+table.estoque td:nth-child(3), table.estoque td:nth-child(4) { white-space: nowrap; }
+table.estoque .acoes .btn { white-space: nowrap; }
+table.estoque tr.sub td:first-child { padding-left: 30px; border-left: 3px solid var(--brand); }
+table.estoque tr.sub td { background: color-mix(in srgb, var(--brand-soft) 35%, transparent); }
+table.estoque .acoes { text-align: right; }
+table.estoque .acoes .btn { margin: 2px 0 2px 2px; padding-left: 8px; padding-right: 8px; }
+table.estoque tr.grp.aberto td:first-child { border-left: 3px solid var(--brand); }
+table.estoque tr.grp.aberto td { background: var(--brand-soft); }
