@@ -22,7 +22,7 @@
     acucar: 'Açúcares',
     vegetal: 'Legumes, frutas e molhos',
     micro: 'Vitaminas e suplementos',
-    essencial: 'Essenciais (sal)'
+    essencial: 'Essenciais e temperos'
   };
 
   var ALIMENTOS = [
@@ -70,6 +70,20 @@
       dica: 'Praticamente não estraga. Também serve para conservar alimentos.' },
     { id: 'sal', nome: 'Sal', grupo: 'essencial', un: 'kg', kcal: 0, prot: 0, gord: 0, carb: 0, rend: 1.0, porcao: 5, coc: 0, agua: 0, val: 60, fonte: 'USDA', core: true, fixed: true,
       dica: 'Essencial. Aproximadamente 5 g por pessoa por dia.' },
+    { id: 'arroz_arboreo', nome: 'Arroz arbóreo (risoto)', grupo: 'cereal', un: 'kg', kcal: 360, prot: 6.6, gord: 0.6, carb: 79.3, rend: 2.5, porcao: 0, coc: 20, agua: 3.0, val: 24, fonte: 'estimado', alias: 'arborio risoto grao medio curto carnaroli', core: false,
+      dica: 'Valores do arroz branco de grão médio (USDA); confira o rótulo da sua marca. Para risoto, 1 kg rende cerca de 2,5 kg.' },
+    { id: 'arroz_basmati', nome: 'Arroz basmati', grupo: 'cereal', un: 'kg', kcal: 365, prot: 7.1, gord: 0.7, carb: 80, rend: 3.0, porcao: 0, coc: 15, agua: 2.0, val: 24, fonte: 'estimado', alias: 'basmati indiano grao longo', core: false,
+      dica: 'Valores do arroz branco de grão longo (USDA); confira o rótulo da sua marca.' },
+    { id: 'arroz_jasmim', nome: 'Arroz jasmim', grupo: 'cereal', un: 'kg', kcal: 365, prot: 7.1, gord: 0.7, carb: 80, rend: 2.8, porcao: 0, coc: 15, agua: 2.0, val: 24, fonte: 'estimado', alias: 'jasmine tailandes perfumado grao longo', core: false,
+      dica: 'Valores do arroz branco de grão longo (USDA); confira o rótulo da sua marca.' },
+    { id: 'vinagre_alcool', nome: 'Vinagre de álcool (branco)', grupo: 'essencial', un: 'l', gpu: 1000, kcal: 18, prot: 0, gord: 0, carb: 0, rend: 1.0, porcao: 3, coc: 0, agua: 0, val: 60, fonte: 'USDA', alias: 'vinagre branco tempero salada conserva', core: false, fixed: true,
+      dica: 'Dura anos fechado. Serve de tempero e também para conservas e limpeza.' },
+    { id: 'vinagre_maca', nome: 'Vinagre de maçã', grupo: 'essencial', un: 'l', gpu: 1000, kcal: 21, prot: 0, gord: 0, carb: 0.9, rend: 1.0, porcao: 3, coc: 0, agua: 0, val: 60, fonte: 'USDA', alias: 'vinagre de cidra apple cider', core: false, fixed: true,
+      dica: 'Dura anos fechado, longe do sol.' },
+    { id: 'vinagre_vinho', nome: 'Vinagre de vinho tinto', grupo: 'essencial', un: 'l', gpu: 1000, kcal: 19, prot: 0, gord: 0, carb: 0.3, rend: 1.0, porcao: 3, coc: 0, agua: 0, val: 60, fonte: 'USDA', alias: 'vinagre tinto vinho', core: false, fixed: true,
+      dica: 'Dura anos fechado, longe do sol.' },
+    { id: 'vinagre_balsamico', nome: 'Vinagre balsâmico', grupo: 'essencial', un: 'l', gpu: 1000, kcal: 88, prot: 0.5, gord: 0, carb: 17, rend: 1.0, porcao: 3, coc: 0, agua: 0, val: 60, fonte: 'USDA', alias: 'balsamico aceto modena', core: false, fixed: true,
+      dica: 'Dura anos fechado. Mais doce e calórico que os outros vinagres.' },
 
     { id: 'milho_lata', nome: 'Milho verde em lata (drenado)', grupo: 'vegetal', un: 'un', gpu: 180, kcal: 98, prot: 3.2, gord: 2.4, carb: 17.1, rend: 1.0, porcao: 30, coc: 0, agua: 0, val: 24, fonte: 'TACO', core: true,
       dica: 'Vegetal pronto, dura 2 anos fechado. O peso drenado varia de 170 a 200 g conforme a marca: informe o peso da sua lata ao cadastrar.' },

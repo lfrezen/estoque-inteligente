@@ -17,14 +17,22 @@ CAT = {'Cereal Grains and Pasta': 'cereal', 'Baked Products': 'cereal', 'Legume 
        'Sweets': 'acucar', 'Dairy and Egg Products': 'laticinio', 'Fruits and Fruit Juices': 'fruta',
        'Vegetables and Vegetable Products': 'vegetal', 'Beef Products': 'carne', 'Pork Products': 'carne',
        'Poultry Products': 'carne', 'Sausages and Luncheon Meats': 'carne', 'Finfish and Shellfish Products': 'pescado',
-       'Soups, Sauces, and Gravies': 'preparado'}
-GRUPO = {172430: 'gordura', 173806: 'gordura', 172441: 'leguminosa', 172188: 'proteina', 169094: 'vegetal'}
+       'Soups, Sauces, and Gravies': 'preparado', 'Spices and Herbs': 'essencial', 'Beverages': 'bebida',
+       'Snacks': 'preparado', 'Breakfast Cereals': 'cereal', 'Lamb, Veal, and Game Products': 'carne'}
+GRUPO = {172430: 'gordura', 173806: 'gordura', 172441: 'leguminosa', 172188: 'proteina', 169094: 'vegetal',
+         # molhos e condimentos ficam em "preparados"; azeitona verde e conservas de legumes em "legumes"
+         174277: 'preparado', 174278: 'preparado', 172442: 'preparado', 171009: 'preparado', 169096: 'vegetal', 172234: 'essencial',
+         174289: 'preparado', 172446: 'laticinio', 172475: 'proteina', 171304: 'laticinio'}
 # rendimento cru -> cozido (kg pronto por kg armazenado); valores médios de uso doméstico
 REND = {}
 for i in (168877, 168879, 168881, 168883, 168931, 169703, 169706): REND[i] = 2.8
 for i in (168927, 169731, 169738): REND[i] = 2.3
 for i in (172420, 174284, 172428): REND[i] = 2.5
 for i in (173734, 173744, 173745, 173758, 174252, 174256, 175199, 175202, 175205, 173756): REND[i] = 2.3
+# arroz parboilizado/pré-cozido, massas orientais, grits e aveia instantânea
+for i in (169707, 168876): REND[i] = 2.8
+REND.update({169709: 2.5, 168906: 2.3, 168908: 2.3, 169742: 2.5, 169755: 2.3, 168903: 2.3, 168911: 2.3, 168915: 2.3, 168899: 2.3, 168937: 2.3,
+             171177: 2.3, 171661: 2.5, 171654: 4.0, 170685: 2.5, 169717: 3.0, 169715: 2.5})
 REND.update({174270: 2.5, 169726: 3.0, 169699: 2.4, 170688: 3.0, 168874: 3.0, 169702: 3.0, 170284: 3.5, 170283: 3.0,
              170286: 2.5, 169745: 2.5, 169743: 2.5, 169747: 3.0, 170682: 3.0, 169716: 2.5, 169705: 2.5,
              170039: 5.5, 170445: 5.5, 170876: 8.0, 173454: 8.0, 172188: 4.0})
