@@ -243,12 +243,16 @@
     if (f.un === 'l') return q < 1 ? n0(q * 1000) + ' mL' : n1(q) + ' L';
     return n1(q) + ' un';
   }
-  function usoUnidades(f) { return f.un === 'kg' ? [['g', 0.001], ['kg', 1]] : f.un === 'l' ? [['mL', 0.001], ['L', 1]] : [['un', 1]]; }
+  function usoUnidades(f, emb) {
+    var u = f.un === 'kg' ? [['g', 0.001], ['kg', 1]] : f.un === 'l' ? [['mL', 0.001], ['L', 1]] : [['un', 1]];
+    if (emb > 0 && f.un !== 'un') u.push(['embalagem (' + fmtQtd(f, emb) + ')', emb]);
+    return u;
+  }
   function painelUso(escopo, id, f) {
     if (!usando || usando.escopo !== escopo || usando.id !== id) return '';
     return '<tr class="usar-row"><td colspan="8"><div class="flex" style="align-items:end">' +
       '<div><label for="usoQtd">Quanto você usou?</label><input id="usoQtd" type="number" min="0" step="any" style="width:110px" autocomplete="off"></div>' +
-      '<div><label for="usoUn">Unidade</label><select id="usoUn">' + usoUnidades(f).map(function (u, i) { return '<option value="' + u[1] + '"' + (i === 0 ? ' selected' : '') + '>' + u[0] + '</option>'; }).join('') + '</select></div>' +
+      '<div><label for="usoUn">Unidade</label><select id="usoUn">' + usoUnidades(f, escopo === 'linha' ? Number((find(state.estoque, id) || {}).emb) || 0 : 0).map(function (u, i) { return '<option value="' + u[1] + '"' + (i === 0 ? ' selected' : '') + '>' + u[0] + '</option>'; }).join('') + '</select></div>' +
       '<div style="flex:1;min-width:140px"><label for="usoNota">Observação (opcional)</label><input id="usoNota" maxlength="40" placeholder="ex.: almoço de hoje"></div>' +
       '<button class="btn" type="button" data-act="uso-ok">Dar baixa</button><button class="btn sec" type="button" data-act="uso-cancel">Cancelar</button></div>' +
       '<div id="usoPrev" class="muted" style="margin-top:6px" role="status">' + (escopo === 'alimento' ? 'A baixa sai primeiro do que vence antes. ' : '') + 'Use a quantidade do que está guardado (cru ou na embalagem).</div></td></tr>';
@@ -282,7 +286,7 @@
       if (p.restante <= 1e-6) state.estoque = state.estoque.filter(function (x) { return x.id !== p.estoqueId; }); else s.qtd = Math.round(p.restante * 1e4) / 1e4;
     });
     var uso = { id: uid(), data: new Date().toISOString(), foodId: fid, total: E.arred6(partes.reduce(function (a, p) { return a + p.qtd; }, 0)), nota: String(nota || '').trim().slice(0, 40),
-      partes: partes.map(function (p) { return { estoqueId: p.estoqueId, qtd: p.qtd, validade: p.validade, pesoUn: p.pesoUn }; }) };
+      partes: partes.map(function (p) { return { estoqueId: p.estoqueId, qtd: p.qtd, validade: p.validade, pesoUn: p.pesoUn, emb: p.emb || 0 }; }) };
     state.usos = state.usos || []; state.usos.unshift(uso);
     if (state.usos.length > 300) state.usos.length = 300;
     return uso.id;
@@ -304,7 +308,9 @@
       '<div class="combo"><label for="foodQ">Alimento</label>' +
       '<input id="foodQ" type="text" role="combobox" aria-expanded="false" aria-controls="foodList" aria-autocomplete="list" autocomplete="off" placeholder="Digite para buscar: arroz, quinoa, lentilha…">' +
       '<input type="hidden" name="foodId" id="foodId"><ul id="foodList" role="listbox" hidden></ul></div>' +
-      '<div><label for="qtdIn">Quantidade <span id="unitLbl">(kg)</span></label><input id="qtdIn" name="qtd" type="number" min="0" step="any" required></div>' +
+      '<div><label for="qtdIn">Quantidade total <span id="unitLbl">(kg)</span></label><input id="qtdIn" name="qtd" type="number" min="0" step="any"></div>' +
+      '<div id="embNWrap"><label for="embN">Nº de embalagens <span class="muted">(opcional)</span></label><input id="embN" name="embN" type="number" min="1" step="1" placeholder="ex.: 2"></div>' +
+      '<div id="embTamWrap"><label for="embTam">Tamanho de cada <span id="embUn">(kg)</span></label><input id="embTam" name="embTam" type="number" min="0" step="any" placeholder="ex.: 5"></div>' +
       '<div id="pesoWrap" hidden><label for="pesoIn">Peso drenado por unidade (g)</label><input id="pesoIn" name="pesoUn" type="number" min="1" step="any" placeholder="ex.: 179"></div>' +
       '<div><label>Validade (opcional)</label>' + dtInput('name="validade"', '') + '</div>' +
       '<div><label for="precoIn">Preço pago (R$, total)</label><input id="precoIn" name="preco" type="number" min="0" step="0.01" placeholder="opcional"></div>' +
@@ -325,6 +331,7 @@
       var f = fm[s.foodId], kg = E.lineKg(f, s), it = byFood[f.id], gl = gs().filter(function (x) { return x.estoqueId === s.id; })[0];
       return '<tr' + (sub ? ' class="sub"' : '') + '><td>' + (sub ? '<span class="muted" aria-hidden="true">↳</span> ' + (s.validade ? 'vence ' + dataBr(s.validade) : 'sem validade') : fname(f)) + '</td>' +
         '<td class="num"><input type="number" min="0" step="any" value="' + s.qtd + '" data-act="qtd" data-id="' + s.id + '" style="width:85px" aria-label="Quantidade"> ' + unitLabel(f).replace('(s)', '') +
+          (Number(s.emb) > 0 && f.un !== 'un' ? '<div class="muted">= ' + n1(s.qtd / s.emb) + ' × ' + fmtQtd(f, s.emb) + '</div>' : '') +
           (f.un === 'un' ? ' × <input type="number" min="1" step="any" value="' + (Number(s.pesoUn) > 0 ? s.pesoUn : f.gpu) + '" data-act="pesoUn" data-id="' + s.id + '" style="width:72px" aria-label="Peso por unidade em gramas"> g' : '') + '</td>' +
         '<td class="num">' + n1(kg * f.rend) + '</td><td class="num">' + n0(kg * 10 * f.kcal) + '</td>' +
         '<td>' + dtInput('data-act="validade" data-id="' + s.id + '" aria-label="Validade"', s.validade || '') + '</td>' +
@@ -1269,16 +1276,18 @@
     if (kind === 'pessoa') {
       state.pessoas.push({ id: uid(), nome: String(fd.get('nome') || '').trim(), perfil: fd.get('perfil'), kcal: Number(fd.get('kcal')) || 0 });
     } else if (kind === 'estoque') {
-      var qtd = Number(fd.get('qtd')), fid = fd.get('foodId');
+      var qtd = Number(fd.get('qtd')), fid = fd.get('foodId'), embN = Number(fd.get('embN')), embTam = Number(fd.get('embTam'));
+      if (!(qtd > 0) && embN > 0 && embTam > 0) qtd = Math.round(embN * embTam * 1e6) / 1e6;
       if (!fid) {
         var exact = E.allFoods(state).filter(function (f) { return norm(f.nome) === norm(document.getElementById('foodQ').value); })[0];
         if (exact) fid = exact.id;
       }
       if (!fid) { document.getElementById('foodHint').textContent = '⚠️ Escolha um alimento da lista (ou cadastre um novo).'; document.getElementById('foodQ').focus(); return; }
-      if (!(qtd > 0)) return;
+      if (!(qtd > 0)) { var qe = document.getElementById('qtdIn'); if (qe) qe.focus(); document.getElementById('foodHint').textContent = '⚠️ Informe a quantidade total, ou o número de embalagens e o tamanho de cada uma.'; return; }
       focusSearch = true;
       var ff = E.foodMap(E.allFoods(state))[fid], peso = Number(fd.get('pesoUn'));
       var linha = { id: uid(), foodId: fid, qtd: qtd, pesoUn: ff && ff.un === 'un' && peso > 0 ? peso : 0, validade: fd.get('validade') || '' };
+      if (ff && ff.un !== 'un' && embTam > 0 && embN > 0 && Math.abs(embN * embTam - qtd) < 1e-6) linha.emb = embTam;
       state.estoque.push(linha);
       var preco = Number(fd.get('preco'));
       if (preco > 0 && ff) gs().push({ id: uid(), tipo: 'estoque', estoqueId: linha.id, foodId: fid, nome: ff.nome, grupo: ff.grupo, qtd: qtd, un: ff.un, kg: E.lineKg(ff, linha), preco: preco, data: fd.get('dataCompra') || FIN.hojeISO(), loja: String(fd.get('loja') || '').trim() });
@@ -1381,6 +1390,7 @@
     var t = e.target;
     if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; document.getElementById('pesoWrap').hidden = true; document.getElementById('pesoIn').value = ''; openCombo(); }
     else if (t.id === 'catQ') { cat.q = t.value; cat.n = 80; catRefresh(); }
+    else if (t.id === 'embN' || t.id === 'embTam') { var n0v = Number(document.getElementById('embN').value), tv = Number(document.getElementById('embTam').value); if (n0v > 0 && tv > 0) document.getElementById('qtdIn').value = Math.round(n0v * tv * 1e6) / 1e6; }
     else if (t.dataset && t.dataset.dt) dtMask(t);
     else if (t.id === 'usoQtd' || t.id === 'usoUn') usoPreview();
     else if (t.dataset && t.dataset.act === 'card-g' && cardEdit) { var ix = Number(t.dataset.i); if (cardEdit.itens[ix]) cardEdit.itens[ix].g = Number(t.value) || 0; }
@@ -1407,6 +1417,8 @@
     var sel = document.getElementById('foodId'); if (!sel || !sel.value) return;
     var f = E.foodMap(E.allFoods(state))[sel.value]; if (!f) return;
     document.getElementById('unitLbl').textContent = '(' + (f.un === 'kg' ? 'kg' : f.un === 'l' ? 'litros' : 'unidades') + ')';
+    var en = document.getElementById('embNWrap'), et = document.getElementById('embTamWrap');
+    if (en && et) { en.hidden = et.hidden = f.un === 'un'; document.getElementById('embUn').textContent = '(' + (f.un === 'l' ? 'litros' : 'kg') + ')'; if (f.un === 'un') { document.getElementById('embN').value = ''; document.getElementById('embTam').value = ''; } }
     var pw = document.getElementById('pesoWrap'), pi = document.getElementById('pesoIn');
     if (pw && pi) { pw.hidden = f.un !== 'un'; if (f.un === 'un' && !pi.value) pi.value = f.gpu; if (f.un !== 'un') pi.value = ''; }
     document.getElementById('foodHint').textContent = (f.dica || '') + (f.rend > 1 ? ' Rendimento: 1 kg → ' + n1(f.rend) + ' kg pronto.' : '');

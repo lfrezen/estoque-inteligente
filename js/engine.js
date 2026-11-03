@@ -45,7 +45,7 @@
     linhas.forEach(function (x) {
       var tem = Number(x.s.qtd) || 0; disponivel += tem;
       var tira = Math.min(tem, falta);
-      if (tira > 1e-9) { partes.push({ estoqueId: x.s.id, qtd: arred6(tira), validade: x.s.validade || '', pesoUn: Number(x.s.pesoUn) || 0, restante: arred6(tem - tira) }); falta -= tira; }
+      if (tira > 1e-9) { partes.push({ estoqueId: x.s.id, qtd: arred6(tira), validade: x.s.validade || '', pesoUn: Number(x.s.pesoUn) || 0, emb: Number(x.s.emb) || 0, restante: arred6(tem - tira) }); falta -= tira; }
     });
     return { partes: partes, falta: falta > 1e-9 ? arred6(falta) : 0, disponivel: arred6(disponivel) };
   }
@@ -66,7 +66,7 @@
       var tiraKg = Math.min(kgLinha, falta);
       if (tiraKg > 1e-9 && kgPorUn > 0) {
         var q = Math.min(tem, tiraKg / kgPorUn);
-        partes.push({ estoqueId: x.s.id, qtd: arred6(q), validade: x.s.validade || '', pesoUn: Number(x.s.pesoUn) || 0, restante: arred6(tem - q) }); falta -= tiraKg;
+        partes.push({ estoqueId: x.s.id, qtd: arred6(q), validade: x.s.validade || '', pesoUn: Number(x.s.pesoUn) || 0, emb: Number(x.s.emb) || 0, restante: arred6(tem - q) }); falta -= tiraKg;
       }
     });
     return { partes: partes, faltaKg: falta > 1e-9 ? arred6(falta) : 0, disponivelKg: arred6(disp) };
@@ -79,7 +79,7 @@
     usos[i].partes.forEach(function (p) {
       var s = (state.estoque || []).filter(function (x) { return x.id === p.estoqueId; })[0];
       if (s) s.qtd = arred6((Number(s.qtd) || 0) + p.qtd);
-      else (state.estoque = state.estoque || []).push({ id: p.estoqueId, foodId: usos[i].foodId, qtd: p.qtd, pesoUn: p.pesoUn || 0, validade: p.validade || '' });
+      else (state.estoque = state.estoque || []).push({ id: p.estoqueId, foodId: usos[i].foodId, qtd: p.qtd, pesoUn: p.pesoUn || 0, emb: p.emb || 0, validade: p.validade || '' });
     });
     usos.splice(i, 1); return true;
   }
