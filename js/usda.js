@@ -294,7 +294,15 @@
     [173230, "Chá instantâneo em pó, sem açúcar", "bebida", 315.0, 20.2, 0.0, 58.7, 1.0, 12, "beverages, tea, instant, unsweetened, powder"],
     [175040, "Bicarbonato de sódio", "cereal", 0.0, 0.0, 0.0, 0.0, 1.0, 12, "leavening agents, baking soda"],
     [171561, "Caldo de carne em cubos, seco", "preparado", 170.0, 17.3, 4.0, 16.1, 1.0, 12, "soup, beef broth, cubed, dry"],
-    [171563, "Caldo de galinha em cubos, seco", "preparado", 198.0, 14.6, 4.7, 23.5, 1.0, 12, "soup, chicken broth cubes, dry"]
+    [171563, "Caldo de galinha em cubos, seco", "preparado", 198.0, 14.6, 4.7, 23.5, 1.0, 12, "soup, chicken broth cubes, dry"],
+    [175176, "Tilápia, filé cru", "pescado", 96.0, 20.1, 1.7, 0.0, 1.0, 12, "fish, tilapia, raw"],
+    [171796, "Carne bovina moída (85% magra), crua", "carne", 215.0, 18.6, 15.0, 0.0, 1.0, 12, "beef, ground, 85% lean meat / 15% fat, raw"],
+    [174030, "Carne bovina moída (90% magra, patinho), crua", "carne", 176.0, 20.0, 10.0, 0.0, 1.0, 12, "beef, ground, 90% lean meat / 10% fat, raw"],
+    [171304, "Iogurte grego natural integral", "laticinio", 97.0, 9.0, 5.0, 4.0, 1.0, 12, "yogurt, greek, plain, whole milk"],
+    [172191, "Ovo de codorna, cru", "laticinio", 158.0, 13.1, 11.1, 0.4, 1.0, 12, "egg, quail, whole, fresh, raw"],
+    [167552, "Pipoca doce caramelizada, pronta", "preparado", 431.0, 3.8, 12.8, 79.1, 1.0, 12, "snacks, popcorn, caramel-coated, without peanuts"],
+    [167960, "Pipoca sabor queijo, pronta", "preparado", 526.0, 9.3, 33.2, 51.6, 1.0, 12, "snacks, popcorn, cheese-flavor"],
+    [171876, "Refrigerante zero (cola), sem calorias", "bebida", 0.0, 0.0, 0.0, 0.1, 1.0, 12, "beverages, carbonated, low calorie, cola or pepper-types, with sodium saccharin, contains caffeine"]
   ];
   U.forEach(function (r) {
     D.ALIMENTOS.push({ id: 'usda_' + r[0], nome: r[1], grupo: r[2], un: 'kg', kcal: r[3], prot: r[4], gord: r[5], carb: r[6],

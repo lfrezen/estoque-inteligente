@@ -23,6 +23,15 @@
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignora */ }
     if (window.DRIVE) agendarDrive();
   }
+  /* busca tolerante: ignora o final da palavra (moída/moído, queijos/queijo) e aceita sinônimos e grafias comuns */
+  var SINON = { glutem: ['gluten'], glutten: ['gluten'], zero: ['zero', 'sem'], miojo: ['instantaneo', 'lamen'], sagu: ['tapioca'], quibe: ['kibe', 'trigo para'], kibe: ['quibe', 'trigo para'],
+    mandioquinha: ['baroa', 'mandioquinha'], salsinha: ['salsa'], microondas: ['micro-ondas', 'micro ondas'], refri: ['refrigerante'], xicara: ['xicara'], hamburguer: ['hamburger', 'hamburguer'],
+    acucar: ['acucar'], chimarrao: ['erva-mate', 'mate'], presunto: ['presunto', 'apresuntado'], lactose: ['lactose'], farofa: ['farofa', 'farinha de mandioca'] };
+  function tokOk(hay, t) {
+    if (hay.indexOf(t) >= 0) return true;
+    var st = t.length >= 5 ? t.replace(/(es|as|os|a|o|e|s)$/, '') : t; if (st !== t && st.length >= 3 && hay.indexOf(st) >= 0) return true;
+    var sy = SINON[t]; return !!sy && sy.some(function (x) { return hay.indexOf(norm(x)) >= 0; });
+  }
   function norm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
   /* ---- datas no padrão brasileiro (dd/mm/aaaa); o estado guarda AAAA-MM-DD ---- */
   function dtBr(iso) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
@@ -742,7 +751,7 @@
     foods = foods.filter(function (f) {
       if (!toks.length) return true;
       var hay = norm(f.nome + ' ' + (f.alias || '') + ' ' + D.GRUPOS[f.grupo]);
-      return toks.every(function (t) { return hay.indexOf(t) >= 0; });
+      return toks.every(function (t) { return tokOk(hay, t); });
     });
     foods.sort(function (a, b) { return ((a.taco || a.usda) ? 1 : 0) - ((b.taco || b.usda) ? 1 : 0) || order.indexOf(a.grupo) - order.indexOf(b.grupo); });
     return foods;
@@ -1332,7 +1341,7 @@
     var foods = E.allFoods(state), toks = norm(q).split(/\s+/).filter(Boolean);
     var res = foods.filter(function (f) {
       var hay = norm(f.nome + ' ' + (f.alias || '') + ' ' + D.GRUPOS[f.grupo]);
-      return toks.every(function (t) { return hay.indexOf(t) >= 0; });
+      return toks.every(function (t) { return tokOk(hay, t); });
     });
     if (toks.length) {
       var t0 = toks[0];

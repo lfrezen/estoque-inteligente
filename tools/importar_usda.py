@@ -22,7 +22,7 @@ CAT = {'Cereal Grains and Pasta': 'cereal', 'Baked Products': 'cereal', 'Legume 
 GRUPO = {172430: 'gordura', 173806: 'gordura', 172441: 'leguminosa', 172188: 'proteina', 169094: 'vegetal',
          # molhos e condimentos ficam em "preparados"; azeitona verde e conservas de legumes em "legumes"
          174277: 'preparado', 174278: 'preparado', 172442: 'preparado', 171009: 'preparado', 169096: 'vegetal', 172234: 'essencial',
-         174289: 'preparado', 172446: 'laticinio', 172475: 'proteina'}
+         174289: 'preparado', 172446: 'laticinio', 172475: 'proteina', 171304: 'laticinio'}
 # rendimento cru -> cozido (kg pronto por kg armazenado); valores médios de uso doméstico
 REND = {}
 for i in (168877, 168879, 168881, 168883, 168931, 169703, 169706): REND[i] = 2.8
