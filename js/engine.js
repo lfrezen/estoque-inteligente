@@ -28,6 +28,39 @@
     return qty * (food.gpu || 0) / 1000;
   }
   /* kg de uma linha de estoque: para itens em unidades, usa o peso informado na linha (ex.: lata de 179 g) */
+
+  /* ---- baixa de estoque (uso) ---- */
+  function arred6(x) { return Math.round(x * 1e6) / 1e6; }
+  /* Quanto sairia de cada entrada para usar 'qtd' (na unidade do alimento: kg, L ou un) de um alimento.
+     Sem estoqueId, usa a regra "vence primeiro, sai primeiro" (entradas sem validade por último).
+     Com estoqueId, só aquela entrada. Não altera o estado. */
+  function planoUso(state, foodId, qtd, estoqueId) {
+    var linhas = (state.estoque || []).map(function (s, i) { return { s: s, i: i }; })
+      .filter(function (x) { return x.s.foodId === foodId && (!estoqueId || x.s.id === estoqueId) && (Number(x.s.qtd) || 0) > 0; });
+    linhas.sort(function (a, b) {
+      var va = a.s.validade || '9999-99-99', vb = b.s.validade || '9999-99-99';
+      return va < vb ? -1 : va > vb ? 1 : a.i - b.i;
+    });
+    var falta = Number(qtd) || 0, partes = [], disponivel = 0;
+    linhas.forEach(function (x) {
+      var tem = Number(x.s.qtd) || 0; disponivel += tem;
+      var tira = Math.min(tem, falta);
+      if (tira > 1e-9) { partes.push({ estoqueId: x.s.id, qtd: arred6(tira), validade: x.s.validade || '', pesoUn: Number(x.s.pesoUn) || 0, restante: arred6(tem - tira) }); falta -= tira; }
+    });
+    return { partes: partes, falta: falta > 1e-9 ? arred6(falta) : 0, disponivel: arred6(disponivel) };
+  }
+  /* desfaz um uso registrado em state.usos: devolve a quantidade às entradas (recria as que foram zeradas) */
+  function desfazUso(state, usoId) {
+    var usos = state.usos || [], i = usos.findIndex(function (u) { return u.id === usoId; });
+    if (i < 0) return false;
+    usos[i].partes.forEach(function (p) {
+      var s = (state.estoque || []).filter(function (x) { return x.id === p.estoqueId; })[0];
+      if (s) s.qtd = arred6((Number(s.qtd) || 0) + p.qtd);
+      else (state.estoque = state.estoque || []).push({ id: p.estoqueId, foodId: usos[i].foodId, qtd: p.qtd, pesoUn: p.pesoUn || 0, validade: p.validade || '' });
+    });
+    usos.splice(i, 1); return true;
+  }
+
   function lineKg(food, s) {
     var q = Number(s.qtd) || 0;
     if (food.un === 'un' && Number(s.pesoUn) > 0) return q * Number(s.pesoUn) / 1000;
@@ -432,6 +465,6 @@
 
   var api = { allFoods: allFoods, foodMap: foodMap, toKg: toKg, lineKg: lineKg, fromKg: fromKg, household: household,
               analyze: analyze, despensa: despensa, sugestoes: sugestoes, ESTRATEGIAS: ESTRATEGIAS,
-              cardapio: cardapio, qtyTexto: qtyTexto, papel: papel, fmtDias: fmtDias, personKcal: personKcal };
+              cardapio: cardapio, planoUso: planoUso, desfazUso: desfazUso, arred6: arred6, qtyTexto: qtyTexto, papel: papel, fmtDias: fmtDias, personKcal: personKcal };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(typeof window !== 'undefined' ? window : this);

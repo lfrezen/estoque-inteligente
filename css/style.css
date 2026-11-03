@@ -266,3 +266,12 @@ details.area summary::-webkit-details-marker { display: none; }
 .btn.mini { padding: 2px 8px; min-height: 0; font-size: .85rem; margin-left: 6px; vertical-align: baseline; }
 .meal.editor { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 6px 0; }
 .meal.editor label { font-size: .8rem; }
+
+/* Estoque: grupos (sanfona) e baixa de uso */
+table.estoque tr.grp td { background: var(--bg2); border-top: 2px solid var(--line); }
+table.estoque tr.sub td { background: color-mix(in srgb, var(--bg2) 55%, transparent); }
+table.estoque tr.usar-row td { background: var(--brand-soft); }
+.grp-btn { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; display: flex; gap: 6px; align-items: center; }
+.grp-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+table.estoque .acoes { white-space: nowrap; }
+.bad { color: var(--bad, #b3261e); }

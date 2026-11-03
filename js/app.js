@@ -5,7 +5,7 @@
 
   var DEFAULT = {
     versao: 1, modo: 'normal', metaDias: 90, pessoas: [], estoque: [], meds: [], custom: [], porcoes: {},
-    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, validadeJanela: 30, atualizado: null, gastos: [], orcamento: 0, cardapioMan: {}, drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
+    aguaL: 0, aguaHigiene: 1, gasKg: 0, fogaoKgH: 0.2, validadeJanela: 30, atualizado: null, gastos: [], orcamento: 0, cardapioMan: {}, usos: [], drive: { clientId: '', auto: false, ultimo: '', remotoMod: '' }
   };
   var state = load();
   var tab = 'painel';
@@ -220,6 +220,64 @@
   /* ---------------- ESTOQUE ---------------- */
   function unitLabel(f) { return f.un === 'kg' ? 'kg' : f.un === 'l' ? 'litro(s)' : 'unidade(s)'; }
 
+  /* ---- baixa de estoque (uso) ---- */
+  var estOpen = {}, usando = null; /* usando: { escopo: 'linha'|'alimento', id } */
+  function fmtQtd(f, q) {
+    if (f.un === 'kg') return q < 1 ? n0(q * 1000) + ' g' : n1(q) + ' kg';
+    if (f.un === 'l') return q < 1 ? n0(q * 1000) + ' mL' : n1(q) + ' L';
+    return n1(q) + ' un';
+  }
+  function usoUnidades(f) { return f.un === 'kg' ? [['g', 0.001], ['kg', 1]] : f.un === 'l' ? [['mL', 0.001], ['L', 1]] : [['un', 1]]; }
+  function painelUso(escopo, id, f) {
+    if (!usando || usando.escopo !== escopo || usando.id !== id) return '';
+    return '<tr class="usar-row"><td colspan="8"><div class="flex" style="align-items:end">' +
+      '<div><label for="usoQtd">Quanto você usou?</label><input id="usoQtd" type="number" min="0" step="any" style="width:110px" autocomplete="off"></div>' +
+      '<div><label for="usoUn">Unidade</label><select id="usoUn">' + usoUnidades(f).map(function (u, i) { return '<option value="' + u[1] + '"' + (i === 0 ? ' selected' : '') + '>' + u[0] + '</option>'; }).join('') + '</select></div>' +
+      '<div style="flex:1;min-width:140px"><label for="usoNota">Observação (opcional)</label><input id="usoNota" maxlength="40" placeholder="ex.: almoço de hoje"></div>' +
+      '<button class="btn" type="button" data-act="uso-ok">Dar baixa</button><button class="btn sec" type="button" data-act="uso-cancel">Cancelar</button></div>' +
+      '<div id="usoPrev" class="muted" style="margin-top:6px" role="status">' + (escopo === 'alimento' ? 'A baixa sai primeiro do que vence antes. ' : '') + 'Use a quantidade do que está guardado (cru ou na embalagem).</div></td></tr>';
+  }
+  function usoLeitura() {
+    var q = document.getElementById('usoQtd'), u = document.getElementById('usoUn'); if (!q || !u) return null;
+    var v = Number(String(q.value).replace(',', '.')); if (!(v > 0)) return null;
+    return v * Number(u.value);
+  }
+  function usoPreview() {
+    var el = document.getElementById('usoPrev'); if (!el || !usando) return;
+    var qtd = usoLeitura(); if (qtd === null) { el.textContent = ''; return; }
+    var fid = usando.escopo === 'alimento' ? usando.id : (find(state.estoque, usando.id) || {}).foodId, f = E.foodMap(E.allFoods(state))[fid]; if (!f) return;
+    var pl = E.planoUso(state, fid, qtd, usando.escopo === 'linha' ? usando.id : '');
+    var partes = pl.partes.map(function (p) { return fmtQtd(f, p.qtd) + (p.validade ? ' (vence ' + new Date(p.validade + 'T00:00:00').toLocaleDateString('pt-BR') + ')' : ' (sem validade)'); }).join(' + ');
+    el.className = pl.falta > 0 ? 'bad' : 'muted';
+    el.textContent = pl.falta > 0 ? 'Só há ' + fmtQtd(f, pl.disponivel) + ' ' + (usando.escopo === 'linha' ? 'nesta entrada' : 'em estoque') + '. Diminua a quantidade.' : 'Vai sair: ' + partes + '. Sobra ' + fmtQtd(f, Math.max(0, pl.disponivel - qtd)) + '.';
+  }
+  function usoConfirmar() {
+    var qtd = usoLeitura(); if (qtd === null) { var q0 = document.getElementById('usoQtd'); if (q0) q0.focus(); return; }
+    var fid = usando.escopo === 'alimento' ? usando.id : (find(state.estoque, usando.id) || {}).foodId; if (!fid) return;
+    var pl = E.planoUso(state, fid, qtd, usando.escopo === 'linha' ? usando.id : '');
+    if (pl.falta > 0 || !pl.partes.length) { usoPreview(); return; }
+    pl.partes.forEach(function (p) {
+      var s = find(state.estoque, p.estoqueId); if (!s) return;
+      if (p.restante <= 1e-6) state.estoque = state.estoque.filter(function (x) { return x.id !== p.estoqueId; }); else s.qtd = p.restante;
+    });
+    var nota = (document.getElementById('usoNota') || {}).value || '';
+    state.usos = state.usos || [];
+    state.usos.unshift({ id: uid(), data: new Date().toISOString(), foodId: fid, total: E.arred6(qtd), nota: nota.trim().slice(0, 40),
+      partes: pl.partes.map(function (p) { return { estoqueId: p.estoqueId, qtd: p.qtd, validade: p.validade, pesoUn: p.pesoUn }; }) });
+    if (state.usos.length > 300) state.usos.length = 300;
+    usando = null; save(); render();
+  }
+  function historicoUso(fm) {
+    var us = state.usos || []; if (!us.length) return '';
+    return '<details class="card area"><summary><span>🧾 <b>Histórico de uso</b></span><span class="muted">' + us.length + '</span></summary>' +
+      us.slice(0, 25).map(function (u) {
+        var f = fm[u.foodId]; if (!f) return '';
+        return '<div class="flex between" style="padding:6px 0;border-top:1px solid var(--line)"><span>' + em(f) + ' ' + esc(f.nome.replace(/ \(.*\)/, '')) + ' <b>' + fmtQtd(f, u.total) + '</b> <span class="muted">· ' +
+          new Date(u.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + (u.nota ? ' · ' + esc(u.nota) : '') + '</span></span>' +
+          '<button class="btn sec mini" type="button" data-act="uso-desfazer" data-id="' + esc(u.id) + '">Desfazer</button></div>';
+      }).join('') + (us.length > 25 ? '<p class="muted">Mostrando os 25 mais recentes.</p>' : '') + '</details>';
+  }
+
   function vEstoque() {
     var foods = E.allFoods(state), fm = E.foodMap(foods);
     var h = '<h2>Estoque</h2><div class="card"><form class="form" data-form="estoque">' +
@@ -237,19 +295,39 @@
     if (!state.estoque.length) return h + '<div class="empty"><big>📦</big>Estoque vazio. Adicione o primeiro alimento acima.</div>';
     var an = E.analyze(state);
     var byFood = {}; an.items.forEach(function (i) { byFood[i.food.id] = i; });
-    h += '<div class="card"><div class="scroll"><table><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Preço (R$)</th><th class="num">Dura</th><th></th></tr></thead><tbody>' +
-      state.estoque.map(function (s) {
-        var f = fm[s.foodId]; if (!f) return '';
-        var kg = E.lineKg(f, s), it = byFood[f.id], gl = gs().filter(function (x) { return x.estoqueId === s.id; })[0];
-        return '<tr><td>' + fname(f) + '</td>' +
-          '<td class="num"><input type="number" min="0" step="any" value="' + s.qtd + '" data-act="qtd" data-id="' + s.id + '" style="width:85px" aria-label="Quantidade"> ' + unitLabel(f).replace('(s)', '') +
-            (f.un === 'un' ? ' × <input type="number" min="1" step="any" value="' + (Number(s.pesoUn) > 0 ? s.pesoUn : f.gpu) + '" data-act="pesoUn" data-id="' + s.id + '" style="width:72px" aria-label="Peso por unidade em gramas"> g' : '') + '</td>' +
-          '<td class="num">' + n1(kg * f.rend) + '</td><td class="num">' + n0(kg * 10 * f.kcal) + '</td>' +
-          '<td><input type="date" value="' + esc(s.validade || '') + '" data-act="validade" data-id="' + s.id + '"></td>' +
-          '<td class="num"><input type="number" min="0" step="0.01" value="' + (gl ? gl.preco : '') + '" data-act="gasto-preco" data-id="' + s.id + '" style="width:84px" placeholder="R$" aria-label="Preço pago">' + (gl ? '<div class="muted">' + unitPreco(gl) + ' · ' + new Date(gl.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + '</div>' : '') + '</td>' +
-          '<td class="num">' + (it && it.porDiaKg > 0 ? dias(it.dias) : '—') + '</td>' +
-          '<td><button class="btn del" data-act="del-estoque" data-id="' + s.id + '">×</button></td></tr>';
-      }).join('') + '</tbody></table></div><p class="muted">Remover um item do estoque <b>não apaga o gasto</b> registrado: para apagar, use a aba Finanças.</p></div>';
+    h += '<div class="card"><div class="scroll"><table class="estoque"><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Preço (R$)</th><th class="num">Dura</th><th></th></tr></thead><tbody>';
+    var grupos = {}, ordem = [];
+    state.estoque.forEach(function (s) { if (!fm[s.foodId]) return; if (!grupos[s.foodId]) { grupos[s.foodId] = []; ordem.push(s.foodId); } grupos[s.foodId].push(s); });
+    ordem.sort(function (a, b) { return fm[a].nome.localeCompare(fm[b].nome, 'pt-BR'); });
+    var vcmp = function (a, b) { var va = a.validade || '9999', vb = b.validade || '9999'; return va < vb ? -1 : va > vb ? 1 : 0; };
+    var dataBr = function (iso) { return iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') : ''; };
+    function linhaEstoque(s, sub) {
+      var f = fm[s.foodId], kg = E.lineKg(f, s), it = byFood[f.id], gl = gs().filter(function (x) { return x.estoqueId === s.id; })[0];
+      return '<tr' + (sub ? ' class="sub"' : '') + '><td>' + (sub ? '<span class="muted" aria-hidden="true">↳</span> ' + (s.validade ? 'vence ' + dataBr(s.validade) : 'sem validade') : fname(f)) + '</td>' +
+        '<td class="num"><input type="number" min="0" step="any" value="' + s.qtd + '" data-act="qtd" data-id="' + s.id + '" style="width:85px" aria-label="Quantidade"> ' + unitLabel(f).replace('(s)', '') +
+          (f.un === 'un' ? ' × <input type="number" min="1" step="any" value="' + (Number(s.pesoUn) > 0 ? s.pesoUn : f.gpu) + '" data-act="pesoUn" data-id="' + s.id + '" style="width:72px" aria-label="Peso por unidade em gramas"> g' : '') + '</td>' +
+        '<td class="num">' + n1(kg * f.rend) + '</td><td class="num">' + n0(kg * 10 * f.kcal) + '</td>' +
+        '<td><input type="date" value="' + esc(s.validade || '') + '" data-act="validade" data-id="' + s.id + '"></td>' +
+        '<td class="num"><input type="number" min="0" step="0.01" value="' + (gl ? gl.preco : '') + '" data-act="gasto-preco" data-id="' + s.id + '" style="width:84px" placeholder="R$" aria-label="Preço pago">' + (gl ? '<div class="muted">' + unitPreco(gl) + ' · ' + new Date(gl.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + '</div>' : '') + '</td>' +
+        '<td class="num">' + (sub ? '' : (it && it.porDiaKg > 0 ? dias(it.dias) : '—')) + '</td>' +
+        '<td class="acoes"><button class="btn sec mini" type="button" data-act="uso-abrir" data-escopo="linha" data-id="' + s.id + '" title="Dar baixa: usei um pouco">➖ Usar</button> <button class="btn del" data-act="del-estoque" data-id="' + s.id + '" aria-label="Remover entrada">×</button></td></tr>' + painelUso('linha', s.id, f);
+    }
+    ordem.forEach(function (fid) {
+      var ls = grupos[fid].slice().sort(vcmp), f = fm[fid];
+      if (ls.length === 1) { h += linhaEstoque(ls[0], false); return; }
+      var aberto = !!estOpen[fid], it = byFood[fid];
+      var totQ = ls.reduce(function (a, s) { return a + (Number(s.qtd) || 0); }, 0), totKg = ls.reduce(function (a, s) { return a + E.lineKg(f, s); }, 0);
+      var prim = ls.filter(function (s) { return s.validade; })[0];
+      h += '<tr class="grp"><td><button class="grp-btn" type="button" data-act="grp-toggle" data-id="' + esc(fid) + '" aria-expanded="' + aberto + '"><span aria-hidden="true">' + (aberto ? '▾' : '▸') + '</span> ' + fname(f, ls.length + ' entradas') + '</button></td>' +
+        '<td class="num"><b>' + n1(totQ) + '</b> ' + unitLabel(f).replace('(s)', '') + '</td>' +
+        '<td class="num">' + n1(totKg * f.rend) + '</td><td class="num">' + n0(totKg * 10 * f.kcal) + '</td>' +
+        '<td>' + (prim ? '<span class="muted">mais próxima:</span> ' + dataBr(prim.validade) : '<span class="muted">sem validade</span>') + '</td>' +
+        '<td class="num muted">—</td><td class="num">' + (it && it.porDiaKg > 0 ? dias(it.dias) : '—') + '</td>' +
+        '<td class="acoes"><button class="btn sec mini" type="button" data-act="uso-abrir" data-escopo="alimento" data-id="' + esc(fid) + '" title="Dar baixa: usei um pouco (sai primeiro o que vence antes)">➖ Usar</button></td></tr>' + painelUso('alimento', fid, f);
+      if (aberto) ls.forEach(function (s) { h += linhaEstoque(s, true); });
+    });
+    h += '</tbody></table></div><p class="muted">Alimentos com mais de uma entrada (validades ou preços diferentes) ficam agrupados: toque na linha para abrir. <b>Usar</b> dá baixa na quantidade; no grupo, sai primeiro o que vence antes. Remover um item do estoque <b>não apaga o gasto</b> registrado: para apagar, use a aba Finanças.</p></div>';
+    h += historicoUso(fm);
     return h;
   }
 
@@ -1005,7 +1083,7 @@
         '<li>No novo, abra este mesmo endereço e entre <b>com a mesma conta Google</b>, depois toque em <i>Restaurar do Drive</i>. Ou use <i>Importar JSON</i> com o arquivo.</li></ol>' +
         '<p><b>Atenção:</b> restaurar <b>substitui</b> os dados do aparelho pelos do backup. O app pede confirmação antes. Se o Drive tiver um backup mais novo que o do aparelho, ele também avisa antes de sobrescrever.</p>') +
       sec(false, '🚀 Primeiros passos', '<ol><li><b>Pessoas</b>: cadastre quem mora na casa (idade e perfil definem as calorias e a água).</li>' +
-        '<li><b>Estoque</b>: busque o alimento, informe a quantidade, e, se quiser, validade, preço e loja.</li>' +
+        '<li><b>Estoque</b>: busque o alimento, informe a quantidade, e, se quiser, validade, preço e loja. Ao usar algo, toque em <b>➖ Usar</b> para dar baixa (a mesma comida com validades diferentes fica agrupada).</li>' +
         '<li><b>Config e backup</b>: informe a água guardada (ex.: caixa de 500 L = 500) e o gás.</li>' +
         '<li><b>Painel</b> e <b>Compras</b>: veja quantos dias duram e o que falta para a meta.</li>' +
         '<li><b>Medicamentos</b> e <b>Prontidão</b>: complete com remédios, mochila de fuga e o plano da família.</li>' +
@@ -1041,7 +1119,7 @@
   document.addEventListener('click', function (e) {
     var t = e.target.closest('[data-tab],[data-act],[data-modo]'); if (!t) return;
     if (t.dataset.modo) { state.modo = t.dataset.modo; save(); render(); return; }
-    if (t.dataset.tab) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
+    if (t.dataset.tab) { tab = t.dataset.tab; usando = null; render(); window.scrollTo(0, 0); return; }
     var act = t.dataset.act, id = t.dataset.id;
     if (act === 'edit-pessoa') { editPessoa = id; render(); var ed = document.querySelector('tr.editando [data-f=nome]'); if (ed) ed.focus(); }
     else if (act === 'cancel-pessoa') { editPessoa = ''; render(); }
@@ -1059,6 +1137,11 @@
     else if (act === 'notif-adiar') { (state.notifAdiar = state.notifAdiar || {})[id] = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
     else if (act === 'notif-reativar') { if (state.notifAdiar) delete state.notifAdiar[id]; save(); render(); }
     else if (act === 'notif-adiar-todas') { state.notifAdiar = state.notifAdiar || {}; var ate = new Date(Date.now() + 86400000).toISOString(); notifCache.forEach(function (n) { state.notifAdiar[n.id] = ate; }); save(); render(); }
+    else if (act === 'grp-toggle') { estOpen[id] = !estOpen[id]; render(); }
+    else if (act === 'uso-abrir') { usando = { escopo: t.dataset.escopo, id: id }; render(); var uq = document.getElementById('usoQtd'); if (uq) { uq.scrollIntoView({ block: 'center' }); uq.focus(); } }
+    else if (act === 'uso-cancel') { usando = null; render(); }
+    else if (act === 'uso-ok') usoConfirmar();
+    else if (act === 'uso-desfazer') { if (E.desfazUso(state, id)) { save(); render(); } }
     else if (act === 'card-edit') { cardIniciar(Number(t.dataset.dia), t.dataset.ref); render(); var cf = document.getElementById('cardFood'); if (cf) cf.scrollIntoView({ block: 'center' }); }
     else if (act === 'card-cancel') { cardEdit = null; render(); }
     else if (act === 'card-rm') { cardEdit.itens.splice(Number(t.dataset.i), 1); render(); }
@@ -1239,11 +1322,14 @@
     var t = e.target;
     if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; document.getElementById('pesoWrap').hidden = true; document.getElementById('pesoIn').value = ''; openCombo(); }
     else if (t.id === 'catQ') { cat.q = t.value; cat.n = 80; catRefresh(); }
+    else if (t.id === 'usoQtd' || t.id === 'usoUn') usoPreview();
     else if (t.dataset && t.dataset.act === 'card-g' && cardEdit) { var ix = Number(t.dataset.i); if (cardEdit.itens[ix]) cardEdit.itens[ix].g = Number(t.value) || 0; }
   });
   document.addEventListener('toggle', function (e) { var d = e.target; if (d && d.dataset && d.dataset.area) prOpen[d.dataset.area] = d.open; }, true);
   document.addEventListener('focusin', function (e) { if (e.target.id === 'foodQ') openCombo(); });
   document.addEventListener('keydown', function (e) {
+    if ((e.target.id === 'usoQtd' || e.target.id === 'usoNota') && e.key === 'Enter') { e.preventDefault(); usoConfirmar(); return; }
+    if (e.target.id === 'usoQtd' && e.key === 'Escape') { usando = null; render(); return; }
     if (e.target.id !== 'foodQ') return;
     var ul = document.getElementById('foodList');
     if (e.key === 'ArrowDown') { e.preventDefault(); if (ul.hidden) openCombo(); else moveCombo(1); }
