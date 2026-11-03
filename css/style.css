@@ -291,3 +291,5 @@ table.estoque tr.grp.aberto td:first-child { border-left: 3px solid var(--brand)
 table.estoque tr.grp.aberto td { background: var(--brand-soft); }
 .meal.feita { background: var(--brand-soft); border-radius: 10px; padding: 6px 8px; }
 .dnum small + small { margin-top: 2px; font-size: .62rem; opacity: .85; }
+table.estoque tr.edit-row td { background: var(--brand-soft); }
+table.estoque .acoes { white-space: normal; }
