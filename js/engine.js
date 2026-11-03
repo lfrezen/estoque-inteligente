@@ -285,13 +285,14 @@
   }
 
   var REFEICOES = [
-    { nome: 'Café', frac: 0.25, slots: [['cafe', 45], ['laticinio', 30], ['doce', 10], ['fruta', 15]], alt: { cafe: ['base'] } },
-    { nome: 'Almoço', frac: 0.35, slots: [['base', 45], ['leguminosa', 22], ['proteina', 18], ['vegetal', 5], ['oleo', 10]], alt: { base: ['cafe'] } },
-    { nome: 'Jantar', frac: 0.25, slots: [['base', 45], ['proteina', 25], ['leguminosa', 15], ['vegetal', 5], ['oleo', 10]], alt: { base: ['cafe'], proteina: ['leguminosa'] } },
-    { nome: 'Lanche', frac: 0.15, slots: [['oleaginosa', 50], ['fruta', 50]], alt: { oleaginosa: ['doce', 'cafe'], fruta: ['doce', 'oleaginosa'] } }
+    { nome: 'Café', frac: 0.22, slots: [['cafe', 45], ['laticinio', 30], ['doce', 10], ['fruta', 15]], alt: { cafe: ['base'] } },
+    { nome: 'Almoço', frac: 0.33, slots: [['base', 38], ['leguminosa', 22], ['proteina', 22], ['vegetal', 8], ['oleo', 10]], alt: { base: ['cafe'] } },
+    { nome: 'Jantar', frac: 0.23, slots: [['base', 38], ['proteina', 27], ['leguminosa', 15], ['vegetal', 8], ['oleo', 12]], alt: { base: ['cafe'], proteina: ['leguminosa'] } },
+    { nome: 'Lanche', frac: 0.12, slots: [['oleaginosa', 50], ['fruta', 50]], alt: { oleaginosa: ['doce', 'cafe'], fruta: ['doce', 'oleaginosa'] } },
+    { nome: 'Ceia', frac: 0.10, slots: [['laticinio', 50], ['cafe', 30], ['fruta', 20]], alt: { laticinio: ['oleaginosa'], cafe: ['base'] } }
   ];
   // limite em gramas prontas por refeição para uma pessoa de referência (2.000 kcal)
-  var CAP = { cafe: 150, base: 450, leguminosa: 220, proteina: 130, vegetal: 150, fruta: 160, laticinio: 250, doce: 25, oleo: 25, oleaginosa: 50 };
+  var CAP = { cafe: 150, base: 230, leguminosa: 220, proteina: 150, vegetal: 150, fruta: 160, laticinio: 250, doce: 25, oleo: 25, oleaginosa: 50 };
 
   function kcalPronto(f, g) { return g * f.kcal / (f.rend || 1) / 100; }
 
@@ -301,7 +302,8 @@
     out.esgota = [];
     if (!h.n || !h.kcal || !an.items.length) return out;
 
-    var rest = {}, cand = {}, esgotado = {}, emUso = {};
+    var rest = {}, cand = {}, esgotado = {}, emUso = {}, emEst = {};
+    an.items.forEach(function (it) { emEst[it.food.id] = true; });
     // validade mais próxima de cada alimento
     var venc = {};
     (state.estoque || []).forEach(function (s) {
@@ -342,6 +344,20 @@
       var dia = { dia: d + 1, refeicoes: [], kcal: 0 }, carry = 0;
       var hojeEsc = {};
       REFEICOES.forEach(function (rf, ri) {
+        /* refeição montada pela pessoa (state.cardapioMan[dia][refeição] = [{ id, g }]): vale no lugar da sugestão e
+           desconta do estoque como qualquer outra; não gera "dívida" de calorias para a próxima refeição */
+        var man = state.cardapioMan && state.cardapioMan[String(d + 1)] && state.cardapioMan[String(d + 1)][rf.nome];
+        if (man) {
+          var itM = [];
+          man.forEach(function (m) {
+            var f = an.fm[m.id], g = Number(m.g); if (!f || !(g > 0)) return;
+            if (rest[f.id] !== undefined) consumir(f, g, d + 1);
+            var kc = kcalPronto(f, g); dia.kcal += kc;
+            itM.push({ food: f, g: g, kcal: kc, foraEstoque: !emEst[f.id] });
+          });
+          carry = 0; dia.refeicoes.push({ nome: rf.nome, itens: itM, manual: true });
+          return;
+        }
         var esc = [], kcalRef = h.kcal * rf.frac + carry; emUso = {};
         rf.slots.forEach(function (sl, si) {
           var role = sl[0];
@@ -360,12 +376,20 @@
             sobra += kcalPronto(f, gDes - g);
             gs.push({ e: e, g: g, cap: cap });
           });
-          // o que sobrou vai para o item principal da refeição (primeiro da lista), até seu limite
-          var prin = gs[0];
-          if (prin && sobra > 0) {
-            var f0 = prin.e.f, extra = sobra * 100 * (f0.rend || 1) / f0.kcal;
-            var capExtra = Math.max(0, ((rf.nome === 'Almoço' || rf.nome === 'Jantar') ? CAP.base * h.f : prin.cap) - prin.g);
-            prin.g += Math.min(extra, capExtra, Math.max(0, prontoMax(f0) - prin.g));
+          // calorias que não couberam nos limites: vão primeiro para os outros itens da refeição (até o limite de cada um),
+          // para não empilhar tudo na base (arroz, massa...) e só então para a base, até o limite dela
+          var rem = sobra;
+          for (var pass = 0; pass < 4 && rem > 1; pass++) {
+            var abertos = gs.filter(function (x) { return x.g < x.cap - 0.5 && x.g < prontoMax(x.e.f) - 0.5; });
+            if (!abertos.length) break;
+            var wsum = abertos.reduce(function (a, x) { return a + x.e.peso; }, 0), gasto = 0;
+            abertos.forEach(function (x) {
+              var add = rem * x.e.peso / wsum * 100 * (x.e.f.rend || 1) / x.e.f.kcal;
+              var a = Math.min(add, x.cap - x.g, prontoMax(x.e.f) - x.g);
+              x.g += a; gasto += kcalPronto(x.e.f, a);
+            });
+            if (gasto < 0.5) break;
+            rem -= gasto;
           }
           gs.forEach(function (x) {
             var g = x.g >= 20 ? Math.round(x.g / 5) * 5 : Math.round(x.g);
