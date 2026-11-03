@@ -10,6 +10,8 @@
     ['sg_pao', 'Pão de forma sem glúten', 'cereal', 'kg', 255, 3, 7, 44, 1, 3, 'zero gluten sem gluten gluten free sem glutem zero glutem'],
     ['sg_farinha', 'Mistura de farinhas sem glúten (pães e bolos)', 'cereal', 'kg', 345, 5, 1.5, 78, 1, 12, 'zero gluten sem gluten gluten free sem glutem zero glutem farinha mix'],
     ['sg_biscoito', 'Biscoito sem glúten', 'cereal', 'kg', 440, 4, 14, 73, 1, 9, 'zero gluten sem gluten gluten free sem glutem zero glutem bolacha'],
+    ['goma_tapioca', 'Goma de tapioca (hidratada, para fazer tapioca)', 'cereal', 'kg', 240, 0.2, 0, 59, 1, 6, 'tapioca goma massa de tapioca hidratada beiju crepioca fecula hidratada'],
+    ['fecula_tapioca', 'Fécula de tapioca (amido de mandioca, seca)', 'cereal', 'kg', 350, 0.3, 0.1, 86, 1, 24, 'tapioca farinha de tapioca polvilho goma seca fecula amido de mandioca'],
     ['arroz_negro', 'Arroz negro', 'cereal', 'kg', 350, 8.5, 3.3, 72, 2.5, 24, 'arroz preto integral gourmet'],
     ['arroz_vermelho', 'Arroz vermelho', 'cereal', 'kg', 360, 7.5, 2.5, 74, 2.5, 24, 'arroz integral gourmet'],
     ['pao_hamburguer', 'Pão de hambúrguer', 'cereal', 'kg', 275, 9, 4.5, 50, 1, 1, 'pao de hamburguer hot dog bisnaguinha'],
