@@ -245,6 +245,47 @@
   /* ---------------- ESTOQUE ---------------- */
   function unitLabel(f) { return f.un === 'kg' ? 'kg' : f.un === 'l' ? 'litro(s)' : 'unidade(s)'; }
 
+  /* ---- edição completa de uma entrada do estoque ---- */
+  var editEst = null; /* id da entrada em edição */
+  function painelEdicaoEst(s, f) {
+    if (editEst !== s.id) return '';
+    var gl = gs().filter(function (x) { return x.estoqueId === s.id; })[0], foods = E.allFoods(state), un = f.un;
+    var emb = Number(s.emb) > 0 && un !== 'un' ? Number(s.emb) : 0;
+    return '<tr class="edit-row"><td colspan="8"><div class="form" style="align-items:end">' +
+      '<div style="grid-column: span 2"><label for="edAli">Alimento</label><input id="edAli" list="edFoods" value="' + esc(f.nome) + '" autocomplete="off"><datalist id="edFoods">' + foods.map(function (x) { return '<option value="' + esc(x.nome) + '">'; }).join('') + '</datalist></div>' +
+      '<div><label for="edQtd">Quantidade total <span class="muted">(' + (un === 'kg' ? 'kg' : un === 'l' ? 'litros' : 'unidades') + ')</span></label><input id="edQtd" type="number" min="0" step="any" value="' + s.qtd + '"></div>' +
+      (un !== 'un' ? '<div><label for="edEmbN">Nº de embalagens</label><input id="edEmbN" type="number" min="1" step="1" placeholder="opcional" value="' + (emb ? Math.round(s.qtd / emb * 100) / 100 : '') + '"></div>' +
+        '<div><label for="edEmbTam">Tamanho de cada</label><input id="edEmbTam" type="number" min="0" step="any" placeholder="opcional" value="' + (emb || '') + '"></div>'
+        : '<div><label for="edPeso">Peso por unidade (g)</label><input id="edPeso" type="number" min="1" step="any" value="' + (Number(s.pesoUn) > 0 ? s.pesoUn : f.gpu || '') + '"></div>') +
+      '<div><label for="edVal">Validade</label>' + dtInput('id="edVal"', s.validade || '') + '</div>' +
+      '<div><label for="edPreco">Preço pago (R$, total)</label><input id="edPreco" type="number" min="0" step="0.01" placeholder="vazio = sem preço" value="' + (gl ? gl.preco : '') + '"></div>' +
+      '<div><label for="edData">Data da compra</label>' + dtInput('id="edData"', gl ? gl.data : FIN.hojeISO()) + '</div>' +
+      '<div><label for="edLoja">Loja</label><input id="edLoja" maxlength="40" list="lojas" value="' + esc(gl ? gl.loja || '' : '') + '"></div>' +
+      '<div class="flex"><button class="btn" type="button" data-act="est-salvar" data-id="' + s.id + '">Salvar</button><button class="btn sec" type="button" data-act="est-cancel">Cancelar</button></div></div>' +
+      '<p class="muted" style="margin:6px 0 0">Preço vazio remove o gasto desta entrada de Finanças. Trocar o alimento corrige o cadastro, sem mexer no histórico de uso.</p></td></tr>';
+  }
+  function estSalvar(id) {
+    var s = find(state.estoque, id); if (!s) { editEst = null; render(); return; }
+    var v = function (i) { var e = document.getElementById(i); return e ? e.value : ''; };
+    var painel = document.querySelector('tr.edit-row'); if (painel && !dtFormOk(painel)) return;
+    var ff = cardAchar(v('edAli')); if (!ff) { alert('Escolha um alimento da lista.'); document.getElementById('edAli').focus(); return; }
+    var qtd = Number(v('edQtd')), n = Number(v('edEmbN')), tam = Number(v('edEmbTam'));
+    if (!(qtd > 0) && n > 0 && tam > 0) qtd = Math.round(n * tam * 1e6) / 1e6;
+    if (!(qtd > 0)) { alert('Informe a quantidade total, ou o número de embalagens e o tamanho de cada uma.'); document.getElementById('edQtd').focus(); return; }
+    var gl = gs().filter(function (x) { return x.estoqueId === id; })[0], teveUso = (state.usos || []).some(function (u) { return u.partes.some(function (p) { return p.estoqueId === id; }); });
+    s.foodId = ff.id; s.qtd = qtd; s.validade = dtIso(v('edVal'));
+    s.pesoUn = ff.un === 'un' ? (Number(v('edPeso')) > 0 ? Number(v('edPeso')) : 0) : 0;
+    if (ff.un !== 'un' && n > 0 && tam > 0 && Math.abs(n * tam - qtd) < 1e-6) s.emb = tam; else delete s.emb;
+    var preco = Number(v('edPreco')) || 0;
+    if (preco > 0) {
+      var dados = { foodId: ff.id, nome: ff.nome, grupo: ff.grupo, un: ff.un, preco: preco, data: dtIso(v('edData')) || FIN.hojeISO(), loja: v('edLoja').trim().slice(0, 40) };
+      if (!gl) { gl = { id: uid(), tipo: 'estoque', estoqueId: s.id }; gs().push(gl); gl.qtd = qtd; gl.kg = E.lineKg(ff, s); }
+      Object.keys(dados).forEach(function (k) { gl[k] = dados[k]; });
+      if (!teveUso) { gl.qtd = qtd; gl.kg = E.lineKg(ff, s); } else if (gl.foodId !== ff.id) { gl.kg = E.lineKg(ff, { qtd: gl.qtd, pesoUn: s.pesoUn }); }
+    } else if (gl) state.gastos = gs().filter(function (x) { return x !== gl; });
+    editEst = null; save(); render();
+  }
+
   /* ---- baixa de estoque (uso) ---- */
   var estOpen = {}, usando = null; /* usando: { escopo: 'linha'|'alimento', id } */
   function fmtQtd(f, q) {
@@ -330,7 +371,7 @@
     if (!state.estoque.length) return h + '<div class="empty"><big>📦</big>Estoque vazio. Adicione o primeiro alimento acima.</div>';
     var an = E.analyze(state);
     var byFood = {}; an.items.forEach(function (i) { byFood[i.food.id] = i; });
-    h += '<div class="card"><div class="scroll"><table class="estoque"><colgroup><col style="width:18%"><col style="width:16%"><col style="width:8%"><col style="width:9%"><col style="width:18%"><col style="width:10%"><col style="width:7%"><col style="width:14%"></colgroup><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Preço (R$)</th><th class="num">Dura</th><th></th></tr></thead><tbody>';
+    h += '<div class="card"><div class="scroll"><table class="estoque"><colgroup><col style="width:17%"><col style="width:15%"><col style="width:8%"><col style="width:9%"><col style="width:17%"><col style="width:11%"><col style="width:7%"><col style="width:16%"></colgroup><thead><tr><th>Alimento</th><th class="num">Qtd.</th><th class="num">Pronto (kg)</th><th class="num">kcal</th><th>Validade</th><th class="num">Preço (R$)</th><th class="num">Dura</th><th></th></tr></thead><tbody>';
     var grupos = {}, ordem = [];
     state.estoque.forEach(function (s) { if (!fm[s.foodId]) return; if (!grupos[s.foodId]) { grupos[s.foodId] = []; ordem.push(s.foodId); } grupos[s.foodId].push(s); });
     ordem.sort(function (a, b) { return fm[a].nome.localeCompare(fm[b].nome, 'pt-BR'); });
@@ -346,7 +387,7 @@
         '<td>' + dtInput('data-act="validade" data-id="' + s.id + '" aria-label="Validade"', s.validade || '') + '</td>' +
         '<td class="num"><input type="number" min="0" step="0.01" value="' + (gl ? gl.preco : '') + '" data-act="gasto-preco" data-id="' + s.id + '" style="width:84px" placeholder="R$" aria-label="Preço pago">' + (gl ? '<div class="muted">' + unitPreco(gl) + ' · ' + new Date(gl.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + '</div>' : '') + '</td>' +
         '<td class="num">' + (sub ? '' : (it && it.porDiaKg > 0 ? dias(it.dias) : '—')) + '</td>' +
-        '<td class="acoes"><button class="btn sec mini" type="button" data-act="uso-abrir" data-escopo="linha" data-id="' + s.id + '" title="Dar baixa: usei um pouco">➖ Usar</button> <button class="btn del" data-act="del-estoque" data-id="' + s.id + '" aria-label="Remover entrada">×</button></td></tr>' + painelUso('linha', s.id, f);
+        '<td class="acoes"><button class="btn sec mini" type="button" data-act="uso-abrir" data-escopo="linha" data-id="' + s.id + '" title="Dar baixa: usei um pouco">➖ Usar</button> <button class="btn sec mini" type="button" data-act="est-editar" data-id="' + s.id + '" title="Editar todos os dados desta entrada" aria-label="Editar entrada">✏️</button> <button class="btn del" data-act="del-estoque" data-id="' + s.id + '" aria-label="Remover entrada">×</button></td></tr>' + painelUso('linha', s.id, f) + painelEdicaoEst(s, f);
     }
     ordem.forEach(function (fid) {
       var ls = grupos[fid].slice().sort(vcmp), f = fm[fid];
@@ -1189,7 +1230,7 @@
   document.addEventListener('click', function (e) {
     var t = e.target.closest('[data-tab],[data-act],[data-modo]'); if (!t) return;
     if (t.dataset.modo) { state.modo = t.dataset.modo; save(); render(); return; }
-    if (t.dataset.tab) { tab = t.dataset.tab; usando = null; render(); window.scrollTo(0, 0); return; }
+    if (t.dataset.tab) { tab = t.dataset.tab; usando = null; editEst = null; render(); window.scrollTo(0, 0); return; }
     var act = t.dataset.act, id = t.dataset.id;
     if (act === 'edit-pessoa') { editPessoa = id; render(); var ed = document.querySelector('tr.editando [data-f=nome]'); if (ed) ed.focus(); }
     else if (act === 'cancel-pessoa') { editPessoa = ''; render(); }
@@ -1207,8 +1248,11 @@
     else if (act === 'notif-adiar') { (state.notifAdiar = state.notifAdiar || {})[id] = new Date(Date.now() + 86400000).toISOString(); save(); render(); }
     else if (act === 'notif-reativar') { if (state.notifAdiar) delete state.notifAdiar[id]; save(); render(); }
     else if (act === 'notif-adiar-todas') { state.notifAdiar = state.notifAdiar || {}; var ate = new Date(Date.now() + 86400000).toISOString(); notifCache.forEach(function (n) { state.notifAdiar[n.id] = ate; }); save(); render(); }
+    else if (act === 'est-editar') { editEst = id; usando = null; render(); var ea = document.getElementById('edAli'); if (ea) { ea.scrollIntoView({ block: 'center' }); } }
+    else if (act === 'est-cancel') { editEst = null; render(); }
+    else if (act === 'est-salvar') estSalvar(id);
     else if (act === 'grp-toggle') { estOpen[id] = !estOpen[id]; render(); }
-    else if (act === 'uso-abrir') { usando = { escopo: t.dataset.escopo, id: id }; render(); var uq = document.getElementById('usoQtd'); if (uq) { uq.scrollIntoView({ block: 'center' }); uq.focus(); } }
+    else if (act === 'uso-abrir') { usando = { escopo: t.dataset.escopo, id: id }; editEst = null; render(); var uq = document.getElementById('usoQtd'); if (uq) { uq.scrollIntoView({ block: 'center' }); uq.focus(); } }
     else if (act === 'uso-cancel') { usando = null; render(); }
     else if (act === 'uso-ok') usoConfirmar();
     else if (act === 'uso-desfazer') { if (E.desfazUso(state, id)) { save(); render(); } }
@@ -1399,6 +1443,7 @@
     var t = e.target;
     if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; document.getElementById('pesoWrap').hidden = true; document.getElementById('pesoIn').value = ''; openCombo(); }
     else if (t.id === 'catQ') { cat.q = t.value; cat.n = 80; catRefresh(); }
+    else if (t.id === 'edEmbN' || t.id === 'edEmbTam') { var en = Number(document.getElementById('edEmbN').value), et = Number(document.getElementById('edEmbTam').value); if (en > 0 && et > 0) document.getElementById('edQtd').value = Math.round(en * et * 1e6) / 1e6; }
     else if (t.id === 'embN' || t.id === 'embTam') { var n0v = Number(document.getElementById('embN').value), tv = Number(document.getElementById('embTam').value); if (n0v > 0 && tv > 0) document.getElementById('qtdIn').value = Math.round(n0v * tv * 1e6) / 1e6; }
     else if (t.dataset && t.dataset.dt) dtMask(t);
     else if (t.id === 'usoQtd' || t.id === 'usoUn') usoPreview();
