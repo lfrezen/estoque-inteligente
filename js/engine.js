@@ -247,6 +247,14 @@
     return { rows: rows, complemento: complemento, kcalPlano: kcalDia, h: h };
   }
 
+
+  /* entradas com quantidade fora do comum (>= 50 kg ou L de uma vez, ou embalagem >= 30): quase sempre é gramas digitado
+     no campo de kg (ex.: 1500 em vez de 1,5). Devolve [{ s, food }] */
+  function suspeitas(state, fm) {
+    return (state.estoque || []).map(function (s) { return { s: s, food: fm[s.foodId] }; })
+      .filter(function (x) { return x.food && x.food.un !== 'un' && ((Number(x.s.qtd) || 0) >= 50 || (Number(x.s.emb) || 0) >= 30); });
+  }
+
   /* Estratégias e sugestões com base na análise */
   function sugestoes(state, an, targetDays) {
     var out = [];
@@ -257,6 +265,10 @@
 
     if (!h.n) { out.push({ nivel: 'info', t: 'Cadastre as pessoas da casa', d: 'Sem pessoas não dá para calcular a necessidade diária.' }); return out; }
     if (!temAlgo) { out.push({ nivel: 'info', t: 'Cadastre o estoque', d: 'Adicione os alimentos que você tem para ver a autonomia.' }); return out; }
+    suspeitas(state, an.fm).forEach(function (x) {
+      var u = x.food.un === 'l' ? 'L' : 'kg';
+      out.push({ nivel: 'alto', t: 'Quantidade muito alta: ' + x.food.nome.replace(/ \(.*\)/, ''), d: 'Está com ' + Math.round(Number(x.s.qtd) * 10) / 10 + ' ' + u + ' no estoque. Se foi digitado em gramas (ex.: 500 g = 0,5 kg), corrija em Estoque (✏️): isso distorce todas as contas de duração.' });
+    });
 
     if (d.energia < targetDays) {
       var falta = Math.ceil(targetDays - d.energia);
@@ -497,6 +509,6 @@
 
   var api = { allFoods: allFoods, foodMap: foodMap, toKg: toKg, lineKg: lineKg, fromKg: fromKg, household: household,
               analyze: analyze, despensa: despensa, sugestoes: sugestoes, ESTRATEGIAS: ESTRATEGIAS,
-              cardapio: cardapio, planoUso: planoUso, planoUsoKg: planoUsoKg, isoLocal: isoLocal, desfazUso: desfazUso, arred6: arred6, qtyTexto: qtyTexto, papel: papel, fmtDias: fmtDias, personKcal: personKcal };
+              cardapio: cardapio, planoUso: planoUso, planoUsoKg: planoUsoKg, suspeitas: suspeitas, isoLocal: isoLocal, desfazUso: desfazUso, arred6: arred6, qtyTexto: qtyTexto, papel: papel, fmtDias: fmtDias, personKcal: personKcal };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(typeof window !== 'undefined' ? window : this);

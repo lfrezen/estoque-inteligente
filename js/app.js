@@ -253,9 +253,9 @@
     var emb = Number(s.emb) > 0 && un !== 'un' ? Number(s.emb) : 0;
     return '<tr class="edit-row"><td colspan="8"><div class="form" style="align-items:end">' +
       '<div style="grid-column: span 2"><label for="edAli">Alimento</label><input id="edAli" list="edFoods" value="' + esc(f.nome) + '" autocomplete="off"><datalist id="edFoods">' + foods.map(function (x) { return '<option value="' + esc(x.nome) + '">'; }).join('') + '</datalist></div>' +
-      '<div><label for="edQtd">Quantidade total <span class="muted">(' + (un === 'kg' ? 'kg' : un === 'l' ? 'litros' : 'unidades') + ')</span></label><input id="edQtd" type="number" min="0" step="any" value="' + s.qtd + '"></div>' +
+      '<div><label for="edQtd">Quantidade total <span class="muted">(' + (un === 'kg' ? 'kg' : un === 'l' ? 'litros' : 'unidades') + ')</span></label><div class="flex" style="gap:6px;flex-wrap:nowrap"><input id="edQtd" type="number" min="0" step="any" value="' + s.qtd + '" style="min-width:0">' + (un !== 'un' ? '<select id="edQtdUn" aria-label="Unidade"><option value="1">' + (un === 'l' ? 'L' : 'kg') + '</option><option value="0.001">' + (un === 'l' ? 'mL' : 'g') + '</option></select>' : '') + '</div></div>' +
       (un !== 'un' ? '<div><label for="edEmbN">Nº de embalagens</label><input id="edEmbN" type="number" min="1" step="1" placeholder="opcional" value="' + (emb ? Math.round(s.qtd / emb * 100) / 100 : '') + '"></div>' +
-        '<div><label for="edEmbTam">Tamanho de cada</label><input id="edEmbTam" type="number" min="0" step="any" placeholder="opcional" value="' + (emb || '') + '"></div>'
+        '<div><label for="edEmbTam">Tamanho de cada</label><div class="flex" style="gap:6px;flex-wrap:nowrap"><input id="edEmbTam" type="number" min="0" step="any" placeholder="opcional" value="' + (emb || '') + '" style="min-width:0"><select id="edEmbUn" aria-label="Unidade"><option value="1">' + (un === 'l' ? 'L' : 'kg') + '</option><option value="0.001">' + (un === 'l' ? 'mL' : 'g') + '</option></select></div></div>'
         : '<div><label for="edPeso">Peso por unidade (g)</label><input id="edPeso" type="number" min="1" step="any" value="' + (Number(s.pesoUn) > 0 ? s.pesoUn : f.gpu || '') + '"></div>') +
       '<div><label for="edVal">Validade</label>' + dtInput('id="edVal"', s.validade || '') + '</div>' +
       '<div><label for="edPreco">Preço pago (R$, total)</label><input id="edPreco" type="number" min="0" step="0.01" placeholder="vazio = sem preço" value="' + (gl ? gl.preco : '') + '"></div>' +
@@ -269,9 +269,10 @@
     var v = function (i) { var e = document.getElementById(i); return e ? e.value : ''; };
     var painel = document.querySelector('tr.edit-row'); if (painel && !dtFormOk(painel)) return;
     var ff = cardAchar(v('edAli')); if (!ff) { alert('Escolha um alimento da lista.'); document.getElementById('edAli').focus(); return; }
-    var qtd = Number(v('edQtd')), n = Number(v('edEmbN')), tam = Number(v('edEmbTam'));
+    var qtd = Number(v('edQtd')) * Number(v('edQtdUn') || 1), n = Number(v('edEmbN')), tam = Number(v('edEmbTam')) * Number(v('edEmbUn') || 1);
     if (!(qtd > 0) && n > 0 && tam > 0) qtd = Math.round(n * tam * 1e6) / 1e6;
     if (!(qtd > 0)) { alert('Informe a quantidade total, ou o número de embalagens e o tamanho de cada uma.'); document.getElementById('edQtd').focus(); return; }
+    if (!qtdConfere(ff, qtd, tam)) { document.getElementById('edQtd').focus(); return; }
     var gl = gs().filter(function (x) { return x.estoqueId === id; })[0], teveUso = (state.usos || []).some(function (u) { return u.partes.some(function (p) { return p.estoqueId === id; }); });
     s.foodId = ff.id; s.qtd = qtd; s.validade = dtIso(v('edVal'));
     s.pesoUn = ff.un === 'un' ? (Number(v('edPeso')) > 0 ? Number(v('edPeso')) : 0) : 0;
@@ -286,6 +287,16 @@
     editEst = null; save(); render();
   }
 
+  /* confere quantidades fora do comum (>= 50 kg/L ou embalagem >= 30): costuma ser gramas digitado no campo de kg */
+  function qtdConfere(f, qtd, emb) {
+    if (f.un === 'un' || !((qtd >= 50) || (emb >= 30))) return true;
+    var u = f.un === 'l' ? 'L' : 'kg', g = f.un === 'l' ? 'mL' : 'g';
+    return confirm('Você informou ' + n1(qtd) + ' ' + u + ' de ' + f.nome.replace(/ \(.*\)/, '') + '. Isso parece muito.\n\nFoi digitado em ' + g + '? Para 500 ' + g + ', escolha "' + g + '" ao lado do número ou digite 0,5 ' + u + '.\n\nOK = manter assim mesmo · Cancelar = voltar e corrigir');
+  }
+  function calcTotalForm() {
+    var n = Number(document.getElementById('embN').value), tm = Number(document.getElementById('embTam').value) * Number(document.getElementById('embUn').value || 1);
+    if (n > 0 && tm > 0) { var tot = Math.round(n * tm * 1e6) / 1e6, m = Number(document.getElementById('qtdUn').value || 1); document.getElementById('qtdIn').value = Math.round(tot / m * 1e6) / 1e6; }
+  }
   /* ---- baixa de estoque (uso) ---- */
   var estOpen = {}, usando = null; /* usando: { escopo: 'linha'|'alimento', id } */
   function fmtQtd(f, q) {
@@ -358,9 +369,9 @@
       '<div class="combo"><label for="foodQ">Alimento</label>' +
       '<input id="foodQ" type="text" role="combobox" aria-expanded="false" aria-controls="foodList" aria-autocomplete="list" autocomplete="off" placeholder="Digite para buscar: arroz, quinoa, lentilha…">' +
       '<input type="hidden" name="foodId" id="foodId"><ul id="foodList" role="listbox" hidden></ul></div>' +
-      '<div><label for="qtdIn">Quantidade total <span id="unitLbl">(kg)</span></label><input id="qtdIn" name="qtd" type="number" min="0" step="any"></div>' +
+      '<div><label for="qtdIn">Quantidade total <span id="unitLbl">(kg)</span></label><div class="flex" style="gap:6px;flex-wrap:nowrap"><input id="qtdIn" name="qtd" type="number" min="0" step="any" style="min-width:0"><select id="qtdUn" aria-label="Unidade da quantidade" style="width:76px"><option value="1">kg</option><option value="0.001">g</option></select></div></div>' +
       '<div id="embNWrap"><label for="embN">Nº de embalagens <span class="muted">(opcional)</span></label><input id="embN" name="embN" type="number" min="1" step="1" placeholder="ex.: 2"></div>' +
-      '<div id="embTamWrap"><label for="embTam">Tamanho de cada <span id="embUn">(kg)</span></label><input id="embTam" name="embTam" type="number" min="0" step="any" placeholder="ex.: 5"></div>' +
+      '<div id="embTamWrap"><label for="embTam">Tamanho de cada</label><div class="flex" style="gap:6px;flex-wrap:nowrap"><input id="embTam" name="embTam" type="number" min="0" step="any" placeholder="ex.: 500" style="min-width:0"><select id="embUn" aria-label="Unidade do tamanho" style="width:76px"><option value="1">kg</option><option value="0.001">g</option></select></div></div>' +
       '<div id="pesoWrap" hidden><label for="pesoIn">Peso drenado por unidade (g)</label><input id="pesoIn" name="pesoUn" type="number" min="1" step="any" placeholder="ex.: 179"></div>' +
       '<div><label>Validade (opcional)</label>' + dtInput('name="validade"', '') + '</div>' +
       '<div><label for="precoIn">Preço pago (R$, total)</label><input id="precoIn" name="preco" type="number" min="0" step="0.01" placeholder="opcional"></div>' +
@@ -962,7 +973,7 @@
   }
 
   /* ---------------- CENTRAL DE NOTIFICAÇÕES ---------------- */
-  var NOTIF_CATS = { validade: { nome: 'Validade', ic: '📅' }, saude: { nome: 'Medicamentos', ic: '💊' }, backup: { nome: 'Backup', ic: '☁️' }, financas: { nome: 'Finanças', ic: '💰' }, prontidao: { nome: 'Prontidão', ic: '🧟' } };
+  var NOTIF_CATS = { validade: { nome: 'Validade', ic: '📅' }, saude: { nome: 'Medicamentos', ic: '💊' }, backup: { nome: 'Backup', ic: '☁️' }, financas: { nome: 'Finanças', ic: '💰' }, prontidao: { nome: 'Prontidão', ic: '🧟' }, estoque: { nome: 'Estoque', ic: '📦' } };
   var NIVEL_ORD = { alto: 0, medio: 1, info: 2 };
   var notifCache = [];
   function quandoDias(d) { return d < 0 ? 'vencido há ' + Math.abs(d) + (Math.abs(d) === 1 ? ' dia' : ' dias') : d === 0 ? 'vence hoje' : d === 1 ? 'vence amanhã' : 'vence em ' + d + ' dias'; }
@@ -986,6 +997,11 @@
       var du = M.duracao(m);
       if (du !== null && du < 15)
         out.push({ id: 'saude:rep:' + m.id, cat: 'saude', nivel: du < 7 ? 'alto' : 'medio', ic: '🔁', ordem: du, titulo: 'Reposição: ' + m.nome, txt: 'A reserva de uso contínuo dura cerca de ' + dias(du) + '. Peça a receita e reponha.', acao: ['Ver medicamentos', 'tab', 'meds'] });
+    });
+    // quantidade fora do comum (costuma ser gramas digitado no campo de kg)
+    E.suspeitas(state, E.foodMap(E.allFoods(state))).forEach(function (x) {
+      out.push({ id: 'suspeita:' + x.s.id, cat: 'estoque', nivel: 'alto', ic: '🔢', ordem: -2, titulo: 'Quantidade muito alta: ' + x.food.nome.replace(/ \(.*\)/, ''),
+        txt: 'Está com ' + n1(Number(x.s.qtd)) + ' ' + (x.food.un === 'l' ? 'L' : 'kg') + '. Foi digitado em ' + (x.food.un === 'l' ? 'mL' : 'gramas') + '? Corrija em Estoque (✏️): isso distorce as contas de duração.', acao: ['Ver estoque', 'tab', 'estoque'] });
     });
     // backup (o id muda com a situação: adiar "alterações pendentes" não esconde "sessão do Google expirou")
     var b = backupAviso();
@@ -1313,7 +1329,7 @@
     if (act === 'med-qtd') { var mq = find(state.meds, t.dataset.id); if (mq) { mq.qtd = Math.max(0, Number(t.value) || 0); save(); render(); } return; }
     if (act === 'rel-opt') { var k = t.dataset.k; rel[k] = k === 'caixas' ? Number(t.value) : t.checked; render(); return; }
     if (act === 'pesoUn') { var sp = find(state.estoque, t.dataset.id); if (sp) { sp.pesoUn = Math.max(0, Number(t.value) || 0); save(); render(); } }
-    else if (act === 'qtd') { var s = find(state.estoque, t.dataset.id); if (s) { s.qtd = Math.max(0, Number(t.value) || 0); save(); render(); } }
+    else if (act === 'qtd') { var s = find(state.estoque, t.dataset.id); if (s) { var nq = Math.max(0, Number(t.value) || 0), fq = E.foodMap(E.allFoods(state))[s.foodId]; if (fq && !qtdConfere(fq, nq, 0)) { render(); return; } s.qtd = nq; save(); render(); } }
     else if (act === 'validade') { var s2 = find(state.estoque, t.dataset.id); if (s2) { s2.validade = t.value; save(); render(); } }
     else if (act === 'porcao') { state.porcoes[t.dataset.id] = Math.max(0, Number(t.value) || 0); save(); render(); }
     else if (act === 'cfg') { var v = Number(t.value); state[t.dataset.k] = isFinite(v) && v >= 0 ? v : 0; if (t.dataset.k === 'metaDias' && !state.metaDias) state.metaDias = 90; save(); render(); }
@@ -1329,13 +1345,16 @@
     if (kind === 'pessoa') {
       state.pessoas.push({ id: uid(), nome: String(fd.get('nome') || '').trim(), perfil: fd.get('perfil'), kcal: Number(fd.get('kcal')) || 0 });
     } else if (kind === 'estoque') {
-      var qtd = Number(fd.get('qtd')), fid = fd.get('foodId'), embN = Number(fd.get('embN')), embTam = Number(fd.get('embTam'));
+      var fid = fd.get('foodId'), embN = Number(fd.get('embN')), embTam = Number(fd.get('embTam')) * Number(document.getElementById('embUn').value || 1);
+      var qtd = Number(fd.get('qtd')) * Number(document.getElementById('qtdUn').value || 1);
       if (!(qtd > 0) && embN > 0 && embTam > 0) qtd = Math.round(embN * embTam * 1e6) / 1e6;
       if (!fid) {
         var exact = E.allFoods(state).filter(function (f) { return norm(f.nome) === norm(document.getElementById('foodQ').value); })[0];
         if (exact) fid = exact.id;
       }
       if (!fid) { document.getElementById('foodHint').textContent = '⚠️ Escolha um alimento da lista (ou cadastre um novo).'; document.getElementById('foodQ').focus(); return; }
+      var ffq = E.foodMap(E.allFoods(state))[fid];
+      if (qtd > 0 && ffq && !qtdConfere(ffq, qtd, embTam)) { document.getElementById('qtdIn').focus(); return; }
       if (!(qtd > 0)) { var qe = document.getElementById('qtdIn'); if (qe) qe.focus(); document.getElementById('foodHint').textContent = '⚠️ Informe a quantidade total, ou o número de embalagens e o tamanho de cada uma.'; return; }
       focusSearch = true;
       var ff = E.foodMap(E.allFoods(state))[fid], peso = Number(fd.get('pesoUn'));
@@ -1443,10 +1462,12 @@
     var t = e.target;
     if (t.id === 'foodQ') { document.getElementById('foodId').value = ''; document.getElementById('unitLbl').textContent = '(kg)'; document.getElementById('foodHint').textContent = ''; document.getElementById('pesoWrap').hidden = true; document.getElementById('pesoIn').value = ''; openCombo(); }
     else if (t.id === 'catQ') { cat.q = t.value; cat.n = 80; catRefresh(); }
-    else if (t.id === 'edEmbN' || t.id === 'edEmbTam') { var en = Number(document.getElementById('edEmbN').value), et = Number(document.getElementById('edEmbTam').value); if (en > 0 && et > 0) document.getElementById('edQtd').value = Math.round(en * et * 1e6) / 1e6; }
-    else if (t.id === 'embN' || t.id === 'embTam') { var n0v = Number(document.getElementById('embN').value), tv = Number(document.getElementById('embTam').value); if (n0v > 0 && tv > 0) document.getElementById('qtdIn').value = Math.round(n0v * tv * 1e6) / 1e6; }
+    else if (t.id === 'edEmbN' || t.id === 'edEmbTam' || t.id === 'edEmbUn') { var en = Number(document.getElementById('edEmbN').value), et = Number(document.getElementById('edEmbTam').value) * Number(document.getElementById('edEmbUn').value || 1); if (en > 0 && et > 0) document.getElementById('edQtd').value = Math.round(en * et / Number((document.getElementById('edQtdUn') || { value: 1 }).value || 1) * 1e6) / 1e6; }
+    else if (t.id === 'embN' || t.id === 'embTam') { calcTotalForm(); }
+    else if (t.id === 'edQtdUn' || t.id === 'edEmbUn') { /* só muda a unidade */ }
     else if (t.dataset && t.dataset.dt) dtMask(t);
     else if (t.id === 'usoQtd' || t.id === 'usoUn') usoPreview();
+    else if (t.id === 'embUn') calcTotalForm();
     else if (t.dataset && t.dataset.act === 'card-g' && cardEdit) { var ix = Number(t.dataset.i); if (cardEdit.itens[ix]) cardEdit.itens[ix].g = Number(t.value) || 0; }
   });
   document.addEventListener('toggle', function (e) { var d = e.target; if (d && d.dataset && d.dataset.area) prOpen[d.dataset.area] = d.open; }, true);
@@ -1472,7 +1493,10 @@
     var f = E.foodMap(E.allFoods(state))[sel.value]; if (!f) return;
     document.getElementById('unitLbl').textContent = '(' + (f.un === 'kg' ? 'kg' : f.un === 'l' ? 'litros' : 'unidades') + ')';
     var en = document.getElementById('embNWrap'), et = document.getElementById('embTamWrap');
-    if (en && et) { en.hidden = et.hidden = f.un === 'un'; document.getElementById('embUn').textContent = '(' + (f.un === 'l' ? 'litros' : 'kg') + ')'; if (f.un === 'un') { document.getElementById('embN').value = ''; document.getElementById('embTam').value = ''; } }
+    if (en && et) { en.hidden = et.hidden = f.un === 'un'; if (f.un === 'un') { document.getElementById('embN').value = ''; document.getElementById('embTam').value = ''; } }
+    var qsel = document.getElementById('qtdUn'), esel = document.getElementById('embUn');
+    if (qsel && esel && f.un !== 'un') { var ops = f.un === 'l' ? ['L', 'mL'] : ['kg', 'g']; [qsel, esel].forEach(function (sl) { sl.options[0].textContent = ops[0]; sl.options[1].textContent = ops[1]; }); }
+    if (qsel) qsel.hidden = f.un === 'un';
     var pw = document.getElementById('pesoWrap'), pi = document.getElementById('pesoIn');
     if (pw && pi) { pw.hidden = f.un !== 'un'; if (f.un === 'un' && !pi.value) pi.value = f.gpu; if (f.un !== 'un') pi.value = ''; }
     document.getElementById('foodHint').textContent = (f.dica || '') + (f.rend > 1 ? ' Rendimento: 1 kg → ' + n1(f.rend) + ' kg pronto.' : '');
